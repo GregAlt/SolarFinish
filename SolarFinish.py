@@ -699,8 +699,8 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
   update()
   cv.createTrackbar('min adjust', 'adjust', 7, 100, on_changemin)
   cv.createTrackbar('max adjust', 'adjust', 30, 100, on_changemax)
-  cv.createTrackbar('gamma', 'adjust', 70, 100, on_changegamma)
-  cv.createTrackbar('gammaweight', 'adjust', 50, 100, on_changegammaweight)
+  cv.createTrackbar('gamma', 'adjust', int(100*gamma), 100, on_changegamma)
+  cv.createTrackbar('gammaweight', 'adjust', int(100*gammaweight), 100, on_changegammaweight)
   cv.waitKey(0)
   return (minadj, maxadj, gamma, gammaweight, minclip)
 
@@ -849,6 +849,8 @@ def ProcessArgs():
     parser.add_argument('-a', '--append', action='store_true', help='append the settings used for gamma, min contrast, and max contrast as part of the output filename')
     parser.add_argument('-f', '--flip', type=str, default='', choices=['h', 'v', 'hv'], help='rotate final images horizontally, vertically, or both')
     parser.add_argument('-g', '--gongalign', type=str, default='', help='Date of GONG image to compare for auto-align, YYYY-MM-DD')
+    parser.add_argument('-b', '--brighten', type=float, default=0.7, help='gamma value to brighten by, 1 = none, 0.1 = extreme bright, 2.0 darken')
+    parser.add_argument('-w', '--brightenweight', type=float, default=0.5, help='weight to shift gamma brightening, 1 = use gamma curve, 0 = less brightening of darker pixels')
     parser.add_argument('filename', nargs='?', type=str, help='Image file to process')
     args = parser.parse_args()
     directory = '.'
@@ -876,7 +878,7 @@ def ProcessArgs():
 
     hflip = 'h' in args.flip
     vflip = 'v' in args.flip
-    return fnlist, silent, directory, hflip, vflip, output, args.append, args.gongalign
+    return fnlist, silent, directory, hflip, vflip, output, args.append, args.gongalign, args.brighten, args.brightenweight
 
 def main():
   print(
@@ -911,7 +913,7 @@ different inputs, so give it a shot.
     print("Upload full disk solar image now, or click cancel to use default test image")
     fnlist[0] = urlToUse if shouldUseUrl else uploadFile()
   else:
-    fnlist, silent, directory, hflip, vflip, outputDirectory, append, gongAlignDate = ProcessArgs()
+    fnlist, silent, directory, hflip, vflip, outputDirectory, append, gongAlignDate, brightengamma, gammaweight = ProcessArgs()
 
   suffix = f"minc_{str(mincontrastadjust)}_maxc_{str(maxcontrastadjust)}_g{str(brightengamma)}" if append else ""
   if gongAlignDate != "":
