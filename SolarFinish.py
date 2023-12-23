@@ -388,17 +388,17 @@ def Similarity(im1,im2):
 ###
 ### local and global search of alignment based on simularity evaluation
 
-def ShowLocalEval(gong_filtered, inpu_rot, inpu_filtered, H, n, angle):
-    pass
-    #cv.imshow("inpu_rot",inpu_rot)
-    #cv.imshow("n",n*0.5-1.0)
-    #cv.waitKey(1)
+def ShowEval(gong_filtered, inpu_rot, inpu_filtered, H, n, angle):
+    if not IN_COLAB:
+      cv.imshow("inpu_rot",inpu_rot)
+      cv.imshow("n",n*0.5-1.0)
+      cv.waitKey(1)
 
-def LocalSearchEvaluate(inpu, lg, mask, gong_filtered, angle, reportcallback):
+def LocalSearchEvaluate(inpu, lg, mask, gong_filtered, angle, showEvalFunc):
     inpu_rot = Rotate(inpu, (inpu.shape[1]//2, inpu.shape[0]//2), angle)
     inpu_filtered = applyFilter(inpu_rot,lg)*mask
     (H,n) = Similarity(gong_filtered, inpu_filtered)
-    reportcallback(gong_filtered, inpu_rot, inpu_filtered, H, n, angle)
+    if showEvalFunc is not None: showEvalFunc(gong_filtered, inpu_rot, inpu_filtered, H, n, angle)
     return (H, n, inpu_rot, inpu_filtered)
 
 ## start with a rough peak, with 3 data points, iterate until narrow enough and return final peak
@@ -417,7 +417,7 @@ def LocalSearch(inpu, lg, mask, gong_filtered, triple, stopping, reportcallback)
         angles, Hs = (ang[peak-1:peak+2], sim[peak-1:peak+2])
     return (angles[1], Hs[1])
 
-def GlobalSearch(inpu, lg, mask, gong_filtered, start, end, count, bestangle, bestsim):
+def GlobalSearch(inpu, lg, mask, gong_filtered, start, end, count, bestangle, bestsim, showEvalFunc):
     angles = []
     Hs = []
     index = -1
@@ -427,9 +427,7 @@ def GlobalSearch(inpu, lg, mask, gong_filtered, start, end, count, bestangle, be
         (H,n) = Similarity(gong_filtered, inpu_filtered)
         angles.append(angle)
         Hs.append(H)
-        #cv.imshow("inpu_rot",inpu_rot)
-        #cv.imshow("n",n*0.5-1.0)
-        #cv.waitKey(1)
+        if showEvalFunc is not None: showEvalFunc(gong_filtered, inpu_rot, inpu_filtered, H, n, angle)
 
     peak = np.argmax(Hs)
     a = (peak-1 + len(Hs)) % len(Hs)
@@ -444,18 +442,20 @@ def CenterAndCropToFixedRadius(center, radius, im, pixelRadius, solarRadii):
     return (center, im)
 
 ## assumes global search has already been done, supplying isflipped and initial 3 results in triple
-def LocalSearchHelper(inpu, isflipped, lg, mask, gong, gong_filtered, triple):
+def LocalSearchHelper(inpu, isflipped, lg, mask, gong, gong_filtered, triple, silent):
     inpu_search = cv.flip(inpu,1) if isflipped else inpu
-    (angle, sim) = LocalSearch(inpu_search, lg, mask, gong_filtered, triple, 0.1, ShowLocalEval)
+    showEvalFunc = None if silent else ShowEval
+    (angle, sim) = LocalSearch(inpu_search, lg, mask, gong_filtered, triple, 0.1, showEvalFunc)
     return (angle, sim, isflipped, True, triple, gong, inpu_search)
 
 ## does a full search including global and local
-def FullSearchHelper(inpu, isflipped, lg, mask, gong, gong_filtered, triple):
-    triple = GlobalSearch(inpu, lg, mask, gong_filtered, -180, 180, 20, 0, -1)
-    (unflippedAngle, unflippedSim) = LocalSearch(inpu, lg, mask, gong_filtered, triple, 0.1, ShowLocalEval)
+def FullSearchHelper(inpu, isflipped, lg, mask, gong, gong_filtered, triple, silent):
+    showEvalFunc = None if silent else ShowEval
+    triple = GlobalSearch(inpu, lg, mask, gong_filtered, -180, 180, 20, 0, -1, showEvalFunc)
+    (unflippedAngle, unflippedSim) = LocalSearch(inpu, lg, mask, gong_filtered, triple, 0.1, showEvalFunc)
     flipped = cv.flip(inpu,1)
-    flippedtriple = GlobalSearch(flipped, lg, mask, gong_filtered, -180, 180, 20, 0, -1)
-    (flippedAngle, flippedSim) = LocalSearch(flipped, lg, mask, gong_filtered, flippedtriple, 0.1, ShowLocalEval)
+    flippedtriple = GlobalSearch(flipped, lg, mask, gong_filtered, -180, 180, 20, 0, -1, showEvalFunc)
+    (flippedAngle, flippedSim) = LocalSearch(flipped, lg, mask, gong_filtered, flippedtriple, 0.1, showEvalFunc)
 
     return (unflippedAngle, unflippedSim, False, True, triple, gong, inpu) if unflippedSim > flippedSim else (flippedAngle, flippedSim, True, True, flippedtriple, gong, flipped)
 
@@ -487,36 +487,35 @@ def CenterImagesForAlignment(inpu, gong, fixedRadius, solarradii):
 
     return (isValidGong, gong, gongcenter, isValidInpu, inpu, inpucenter)
 
-def AlignImages(gong, inpu, fixedRadius, triple, isflipped, searchfunc):
+def AlignImages(gong, inpu, fixedRadius, triple, isflipped, silent, searchfunc):
     (isValidGong, gong, gongcenter, isValidInpu, inpu, inpucenter) = CenterImagesForAlignment(inpu, gong, fixedRadius, 1.1)
     if not isValidGong or not isValidInpu:
         return (0, 0, False, False, ([],[]), gong, inpu)
+
+    if not silent and not IN_COLAB:
+      cv.imshow("gong",gong)
+      cv.waitKey(1)
 
     lg = getLGs(gong.shape[0],4,4)
     mask = cv.merge([getDiskMask(gong, gongcenter, (int)(fixedRadius * 0.8)) for _ in range(len(lg))])
     gong_filtered = applyFilter(gong,lg)*mask
 
-    return searchfunc(inpu, isflipped, lg, mask, gong, gong_filtered, triple)
+    return searchfunc(inpu, isflipped, lg, mask, gong, gong_filtered, triple, silent)
 
 # do a single experiment with one image and one percent
-def Align(inpu, date, i, percent, triple, flipped, searchfunc):
+def Align(inpu, date, percent, triple, flipped, silent, searchfunc):
     gong = GetGongImageForDate(datetime.datetime.strptime(date, '%Y/%m/%d'), percent)
-    (angle, similarity, flipped, matchFound, triple, gongout, inpuout) = AlignImages(gong, inpu, 128, triple, flipped, searchfunc)
-    #if matchFound:
-    #    print(f"  {i}, {percent}, {angle}, {flipped}, {similarity}")
-    #    ShowResult(gong,inpu,angle, flipped)
-    #else:
-    #    print(f"  {i} Failed")
+    (angle, similarity, flipped, matchFound, triple, gongout, inpuout) = AlignImages(gong, inpu, 128, triple, flipped, silent, searchfunc)
     return (angle, similarity, triple, flipped, gong, gongout, inpu, inpuout)
 
 # given an image and a date, find the best angle
-def FindBestAlignment(input_i, date, i):
-    (angle, similarity, triple, flipped, gong_big, gong, inpu_big, inpu) = Align(input_i, date, i, 0.5, None, None, FullSearchHelper)
+def FindBestAlignment(input_i, date, silent):
+    (angle, similarity, triple, flipped, gong_big, gong, inpu_big, inpu) = Align(input_i, date, 0.5, None, None, silent, FullSearchHelper)
     best = (0.5, angle, flipped, similarity, gong_big, gong, inpu_big, inpu)
     percents = np.linspace(0.1,0.9,9).tolist() # from 0.1 to 0.9, inclusive, by 0.1
     percents.remove(0.5) # and remove 0.5
     for percent in percents:
-        (angle, similarity, triple, flipped, gong_big, gong, inpu_big, inpu) = Align(input_i, date, i, percent, triple, flipped, LocalSearchHelper)
+        (angle, similarity, triple, flipped, gong_big, gong, inpu_big, inpu) = Align(input_i, date, percent, triple, flipped, silent, LocalSearchHelper)
         if similarity > best[3]:
             best = (percent, angle, flipped, similarity, gong_big, gong, inpu_big, inpu)
     return best
@@ -741,7 +740,7 @@ def AlignImage(im, date, silent):
     print(f"Aligning with GONG image from {date}. This might take a minute.")
 
   date = date.replace('-','/')
-  best = FindBestAlignment(im, date, 0)
+  best = FindBestAlignment(im, date, silent)
   percent, angle, flipped, similarity, gong_big, gong, inpu_big, inpu = best
 
   if not silent:
