@@ -687,20 +687,40 @@ def Enhance(img, n, minrecip, maxrecip, minclip):
 def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, gammaweight, minclip):
   def on_changemin(val): nonlocal minadj; minadj = 1.0+val/10.0; update()
   def on_changemax(val): nonlocal maxadj; maxadj = 1.0+val/10.0; update()
-  def on_changegamma(val): nonlocal gamma; gamma = val/100.0; update()
-  def on_changegammaweight(val): nonlocal gammaweight; gammaweight = val/100.0; update()
+  def on_changegamma(val): nonlocal gamma; gamma = val/100.0; updatePostEnhance()
+  def on_changegammaweight(val): nonlocal gammaweight; gammaweight = val/100.0; updatePostEnhance()
+  def on_changequadrant(val): nonlocal quadrant; quadrant = val; update()
 
-  def update():
-    enhance = Enhance(shrink(img,3), 6, minadj, maxadj, 0.01)
-    enhance = brighten(enhance, gamma, gammaweight)
-    enhance8 = swapRB(colorize8RGB(enhance, 0.5, 1.25, 3.75))
+  def updateEnhance():
+    (newcenter, newimg) = CropToDist(img, center, radius * 1.2)
+    im = shrink(newimg,3) if quadrant == 0 else newimg
+    nonlocal enhance; enhance = Enhance(im, 6, minadj, maxadj, 0.01)
+    
+  def updatePostEnhance():
+    nonlocal enhance;
+    if quadrant == 0:
+      im = enhance
+    else:
+      h = enhance.shape[0]
+      r = (quadrant-1)//2
+      c = (quadrant-1)%2
+      im = enhance[r*(h//2):r*(h//2)+h//2,c*(h//2):c*(h//2)+h//2]
+    brightened = brighten(im, gamma, gammaweight)
+    enhance8 = swapRB(colorize8RGB(brightened, 0.5, 1.25, 3.75))
     cv.imshow('adjust', enhance8)
 
+  def update():
+    updateEnhance()
+    updatePostEnhance()
+
+  quadrant = 0
+  enhance = None
   update()
   cv.createTrackbar('min adjust', 'adjust', 7, 100, on_changemin)
   cv.createTrackbar('max adjust', 'adjust', 30, 100, on_changemax)
   cv.createTrackbar('gamma', 'adjust', int(100*gamma), 100, on_changegamma)
   cv.createTrackbar('gammaweight', 'adjust', int(100*gammaweight), 100, on_changegammaweight)
+  cv.createTrackbar('quadrant', 'adjust', 0, 4, on_changequadrant)
   cv.waitKey(0)
   return (minadj, maxadj, gamma, gammaweight, minclip)
 
