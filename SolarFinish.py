@@ -684,15 +684,16 @@ def Enhance(img, n, minrecip, maxrecip, minclip):
 ###
 ### Interactive
 
-def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, gammaweight, minclip):
+def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, gammaweight, minclip, cropradius):
   def on_changemin(val): nonlocal minadj; minadj = 1.0+val/10.0; update()
   def on_changemax(val): nonlocal maxadj; maxadj = 1.0+val/10.0; update()
   def on_changegamma(val): nonlocal gamma; gamma = val/100.0; updatePostEnhance()
   def on_changegammaweight(val): nonlocal gammaweight; gammaweight = val/100.0; updatePostEnhance()
   def on_changequadrant(val): nonlocal quadrant; quadrant = val; update()
+  def on_changeradius(val): nonlocal cropradius; cropradius = 1.0+val/50.0; update()
 
   def updateEnhance():
-    (newcenter, newimg) = CropToDist(img, center, radius * 1.2)
+    (newcenter, newimg) = CropToDist(img, center, radius * cropradius)
     im = shrink(newimg,3) if quadrant == 0 else newimg
     nonlocal enhance; enhance = Enhance(im, 6, minadj, maxadj, 0.01)
     
@@ -713,6 +714,7 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
     updateEnhance()
     updatePostEnhance()
 
+  cropradius = 1.2
   quadrant = 0
   enhance = None
   update()
@@ -720,9 +722,10 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
   cv.createTrackbar('max adjust', 'adjust', 30, 100, on_changemax)
   cv.createTrackbar('gamma', 'adjust', int(100*gamma), 100, on_changegamma)
   cv.createTrackbar('gammaweight', 'adjust', int(100*gammaweight), 100, on_changegammaweight)
+  cv.createTrackbar('cropradius', 'adjust', int(50*1.2), 100, on_changeradius)
   cv.createTrackbar('quadrant', 'adjust', 0, 4, on_changequadrant)
   cv.waitKey(0)
-  return (minadj, maxadj, gamma, gammaweight, minclip)
+  return (minadj, maxadj, gamma, gammaweight, minclip, cropradius)
 
 ###
 ### main - drive the high-level flow
@@ -775,7 +778,7 @@ def AlignImage(im, date, silent):
   return im
 
 # process a single image, silently
-def SilentProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight):
+def SilentProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, cropradius):
   (isValid, srccenter, radius) = findValidCircle(src)
   if(not isValid):
     return None
@@ -785,7 +788,8 @@ def SilentProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight):
   img = toFloat01from16bit(centered)
 
   enhance = CNRGF_Enhance(img, minrecip, maxrecip, "", True)
-  (center, enhance) = CropToDist(enhance, center, CalcMinDistToEdge(srccenter, src.shape))
+  dist = min(cropradius * radius, CalcMinDistToEdge(srccenter, src.shape))
+  (center, enhance) = CropToDist(enhance, center, dist)
 
   # brighten and colorize
   enhance = brighten(enhance, brightengamma, gammaweight)
@@ -793,7 +797,7 @@ def SilentProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight):
   return enhance16
 
 # process a single image, with verbose output
-def ProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, fn):
+def ProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, cropradius, fn):
   # find the solar disk circle
   (isValid, srccenter, radius) = findValidCircle(src)
   if(not isValid):
@@ -822,12 +826,12 @@ def ProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, fn):
   minclip = 0.01
   if not IN_COLAB:
     disttoedge = CalcMinDistToEdge(srccenter, src.shape)
-    params = InteractiveAdjust(img, center, radius, disttoedge, minrecip, maxrecip, brightengamma, gammaweight, minclip)
-    (minrecip, maxrecip, brightengamma, gammaweight, minclip) = params
+    params = InteractiveAdjust(img, center, radius, disttoedge, minrecip, maxrecip, brightengamma, gammaweight, minclip, cropradius)
+    (minrecip, maxrecip, brightengamma, gammaweight, minclip, cropradius) = params
 
   enhance = CNRGF_Enhance(img, minrecip, maxrecip, fn, False)
-  #enhance = Enhance(img, 6, minrecip, maxrecip, minclip)
-  (center, enhance) = CropToDist(enhance, center, CalcMinDistToEdge(srccenter, src.shape))
+  dist = min(cropradius * radius, CalcMinDistToEdge(srccenter, src.shape))
+  (center, enhance) = CropToDist(enhance, center, dist)
 
   # brighten and colorize
   enhance = brighten(enhance, brightengamma, gammaweight)
@@ -843,7 +847,7 @@ def ProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, fn):
   return enhance16
 
 # process a single image - from filename or URL
-def imageMain(filenameOrUrl, silent, hflip, vflip, align, date, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight):
+def imageMain(filenameOrUrl, silent, hflip, vflip, align, date, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius):
   src, filename = FetchImage(filenameOrUrl)
   src = FlipImage(src, hflip, vflip)
 
@@ -851,9 +855,9 @@ def imageMain(filenameOrUrl, silent, hflip, vflip, align, date, mincontrastadjus
     src = AlignImage(src, date, silent)
 
   if silent:
-    enhance16 = SilentProcessImage(src, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight)
+    enhance16 = SilentProcessImage(src, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius)
   else:
-    enhance16 = ProcessImage(src, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, filename)
+    enhance16 = ProcessImage(src, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius, filename)
 
   return enhance16, filename
 
@@ -921,6 +925,7 @@ different inputs, so give it a shot.
   maxcontrastadjust = 3.0 # @param {type:"number"}   # 4.0
   brightengamma = 0.5 # @param {type:"number"}       # 0.7
   gammaweight = 0.5 # @param {type:"number")         # 0.5
+  cropradius = 1.4 # @param {type:"number")          # 1.4
   shouldAlignFirst = False # @param {type:"boolean"}
   dateIfAligning = "2023-12-17" # @param {type:"date"}
   shouldUseUrl = False # @param {type:"boolean"}
@@ -945,7 +950,7 @@ different inputs, so give it a shot.
 
   for fn in fnlist:
     fullName = fn if isUrl(fn) else directory + '/' + fn
-    enhance16, outfn = imageMain(fullName, silent, hflip, vflip, shouldAlignFirst, dateIfAligning, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight)
+    enhance16, outfn = imageMain(fullName, silent, hflip, vflip, shouldAlignFirst, dateIfAligning, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius)
     if not IN_COLAB:
       outfn = outputDirectory + '/' + os.path.basename(outfn) # replace input dir without output dir
       writeImage(enhance16, outfn, "enhancedcolor" + suffix)
