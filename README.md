@@ -9,3 +9,4 @@ Supports:
 - Cropping to given solar radius multiple
 - Brightening with a blended gamma curve: `weight*np.power(im, gamma) + (1-weight)*(1-np.power(1-im,1/gamma))`
 - Simple colorization with linear RGB
+- Batch processing images in a directory
