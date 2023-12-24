@@ -237,7 +237,7 @@ def CenterAndExpand(center,src):
     return (newcenter, outimg)
 
 def CropToDist(src, center, mindist):
-    mindist = math.ceil(mindist)
+    mindist = min(math.ceil(mindist), src.shape[0]//2) # don't allow a crop larger than the image 
     newcenter = (mindist, mindist)
     # note, does NOT force to odd
     outimg = src[center[1]-mindist:center[1]+mindist, center[0]-mindist:center[0]+mindist]
@@ -714,6 +714,7 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
     updateEnhance()
     updatePostEnhance()
 
+  print("starting interactive")
   cropradius = 1.2
   quadrant = 0
   enhance = None
@@ -722,7 +723,7 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
   cv.createTrackbar('max adjust', 'adjust', 30, 100, on_changemax)
   cv.createTrackbar('gamma', 'adjust', int(100*gamma), 100, on_changegamma)
   cv.createTrackbar('gammaweight', 'adjust', int(100*gammaweight), 100, on_changegammaweight)
-  cv.createTrackbar('cropradius', 'adjust', int(50*1.2), 100, on_changeradius)
+  cv.createTrackbar('cropradius', 'adjust', int(50*0.2), 100, on_changeradius)
   cv.createTrackbar('quadrant', 'adjust', 0, 4, on_changequadrant)
   cv.waitKey(0)
   return (minadj, maxadj, gamma, gammaweight, minclip, cropradius)
@@ -890,6 +891,8 @@ def ProcessArgs():
           fnlist = [os.path.basename(args.filename)]
         else:
           fnlist = [args.filename]
+      elif isUrl(args.filename):
+        fnlist = [args.filename]
 
     if len(fnlist) == 0:
       print(f"No files found, using sample image")
