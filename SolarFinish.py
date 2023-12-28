@@ -1,5 +1,7 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
 
+## Version 0.11 - Added more command line args, for all parameters. Also expanded
+##                interactive mode with more sliders.
 ## Version 0.10 - Fixed some bugs in command line args
 ## Version 0.09 - Added batch mode and command line args from kraegar
 ## Version 0.08 - Refactored main() to better incorporate batch mode ability
@@ -17,11 +19,14 @@ __copyright__ = "Copyright (C) 2023 Greg Alt"
 ##                processing without noticeable artifcacts. Also generally cleaned
 ##                up the script.
 
-## TODOS        - better control over min/max contrast adjustment params. Most flexible
+## TODOS        - cleanup of variable/function names to be consistent and match coding
+##                standards
+##              - cleanup of functions responsible for main flow, moving towards a chain
+##                of optional filter tools.
+##              - breakup/cleanup into multiple files (might mean abandoning Colab?)
+##              - more attention to removing artifacts/noise beyond limb
+##              - better control over min/max contrast adjustment params. Most flexible
 ##                would be 4 params for min/max input and min/max output
-##              - tunable final minclip, to hide noise beyond limb
-##              - parameter for final crop, in solar radii, with reasonable default
-##              - try implementing sliders for contrast and brightness params
 ##              - better sub-pixel circle finding, and shifting before processing
 ##              - how to allow more continuous brightness of filaproms across limb?
 
