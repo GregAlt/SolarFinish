@@ -717,6 +717,7 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
     updatePostEnhance()
 
   print("starting interactive")
+  rotation %= 360.0
   initrotation = rotation
   quadrant = 0
   enhance = None
