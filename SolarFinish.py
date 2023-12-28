@@ -146,7 +146,7 @@ def toFloat01from16bit(im):
 ### Image filtering and warp/unwarping
 
 def Rotate(im, center, angleDeg):
-    rows,cols = im.shape
+    rows,cols = im.shape[0:2]
     M = cv.getRotationMatrix2D(center,angleDeg,1)
     return cv.warpAffine(im,M,(cols,rows))
 
@@ -637,7 +637,7 @@ def displayIntermediateResults(polar_image, meanimage, unwarpedmean, diff, norms
 # radius, but the problems have many similarities and it should be possible to use the
 # algorithms interchangeably for solar images more generally, including full disk
 # white light images.
-def CNRGF_Enhance(img, minrecip, maxrecip, fn, silent):
+def CNRGF_Enhance(img, minrecip, maxrecip, fn, minclip, silent):
   # find mean and standard deviation image from polar-warped image, then unwarp
   polar_image = PolarWarp(img)
   (meanimage, stddevs) = GetMeanAndStddevImage(polar_image, 6)
@@ -653,7 +653,7 @@ def CNRGF_Enhance(img, minrecip, maxrecip, fn, silent):
   enhance = diff*enhanceFactor + unwarpedmean
 
   # final normalize and clip
-  enhance = enhance.clip(min=0.01) # don't want sunspot pixels blowing up the normalize
+  enhance = enhance.clip(min=minclip) # don't want sunspot pixels blowing up the normalize
   enhance = cv.normalize(enhance, None, 0,1, cv.NORM_MINMAX).clip(min=0).clip(max=1)
 
   displayIntermediateResults(polar_image, meanimage, unwarpedmean, diff, normstddev, enhanceFactor, enhance, fn, silent)
@@ -684,13 +684,14 @@ def Enhance(img, n, minrecip, maxrecip, minclip):
 ###
 ### Interactive
 
-def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, gammaweight, minclip, cropradius):
+def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, gammaweight, minclip, cropradius, rotation):
   def on_changemin(val): nonlocal minadj; minadj = 1.0+val/10.0; update()
   def on_changemax(val): nonlocal maxadj; maxadj = 1.0+val/10.0; update()
   def on_changegamma(val): nonlocal gamma; gamma = val/100.0; updatePostEnhance()
   def on_changegammaweight(val): nonlocal gammaweight; gammaweight = val/100.0; updatePostEnhance()
   def on_changequadrant(val): nonlocal quadrant; quadrant = val; update()
   def on_changeradius(val): nonlocal cropradius; cropradius = 1.0+val/50.0; update()
+  def on_changerotation(val): nonlocal rotation; rotation = val/10.0; updatePostEnhance()
 
   def updateEnhance():
     (newcenter, newimg) = CropToDist(img, center, radius * cropradius)
@@ -708,6 +709,7 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
       im = enhance[r*(h//2):r*(h//2)+h//2,c*(h//2):c*(h//2)+h//2]
     brightened = brighten(im, gamma, gammaweight)
     enhance8 = swapRB(colorize8RGB(brightened, 0.5, 1.25, 3.75))
+    enhance8 = Rotate(enhance8, (enhance8.shape[1]//2,enhance8.shape[0]//2), rotation-initrotation)
     cv.imshow('adjust', enhance8)
 
   def update():
@@ -715,7 +717,7 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
     updatePostEnhance()
 
   print("starting interactive")
-  cropradius = 1.2
+  initrotation = rotation
   quadrant = 0
   enhance = None
   update()
@@ -725,8 +727,9 @@ def InteractiveAdjust(img, center, radius, disttoedge, minadj, maxadj, gamma, ga
   cv.createTrackbar('gammaweight', 'adjust', int(100*gammaweight), 100, on_changegammaweight)
   cv.createTrackbar('cropradius', 'adjust', int(50*0.2), 100, on_changeradius)
   cv.createTrackbar('quadrant', 'adjust', 0, 4, on_changequadrant)
+  cv.createTrackbar('rotation', 'adjust', int(10*rotation), 3600, on_changerotation)
   cv.waitKey(0)
-  return (minadj, maxadj, gamma, gammaweight, minclip, cropradius)
+  return (minadj, maxadj, gamma, gammaweight, minclip, cropradius, rotation)
 
 ###
 ### main - drive the high-level flow
@@ -779,7 +782,7 @@ def AlignImage(im, date, silent):
   return im
 
 # process a single image, silently
-def SilentProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, cropradius):
+def SilentProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, cropradius, minclip):
   (isValid, srccenter, radius) = findValidCircle(src)
   if(not isValid):
     return None
@@ -788,7 +791,7 @@ def SilentProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, crop
   (center, centered) = CenterAndExpand(srccenter,src)
   img = toFloat01from16bit(centered)
 
-  enhance = CNRGF_Enhance(img, minrecip, maxrecip, "", True)
+  enhance = CNRGF_Enhance(img, minrecip, maxrecip, "", minclip, True)
   dist = min(cropradius * radius, CalcMinDistToEdge(srccenter, src.shape))
   (center, enhance) = CropToDist(enhance, center, dist)
 
@@ -798,7 +801,7 @@ def SilentProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, crop
   return enhance16
 
 # process a single image, with verbose output
-def ProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, cropradius, fn):
+def ProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, cropradius, minclip, rotation, fn):
   # find the solar disk circle
   (isValid, srccenter, radius) = findValidCircle(src)
   if(not isValid):
@@ -824,13 +827,16 @@ def ProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, cropradius
   imageWithCircle = addCircle(gray2rgb(img), center, radius, (0,0,1), 1)
   downloadButton(float01to16bit(imageWithCircle), fn, "withcircle")
 
-  minclip = 0.01
   if not IN_COLAB:
     disttoedge = CalcMinDistToEdge(srccenter, src.shape)
-    params = InteractiveAdjust(img, center, radius, disttoedge, minrecip, maxrecip, brightengamma, gammaweight, minclip, cropradius)
-    (minrecip, maxrecip, brightengamma, gammaweight, minclip, cropradius) = params
+    initrotation = rotation
+    params = InteractiveAdjust(img, center, radius, disttoedge, minrecip, maxrecip, brightengamma, gammaweight, minclip, cropradius, rotation)
+    (minrecip, maxrecip, brightengamma, gammaweight, minclip, cropradius, rotation) = params
+    print(f"Command line:\nSolarFinish --brighten {brightengamma} --brightenweight {gammaweight} --enhance {minrecip},{maxrecip} --crop {cropradius} --rotate {rotation} --darkclip {minclip}\n")
 
-  enhance = CNRGF_Enhance(img, minrecip, maxrecip, fn, False)
+  enhance = CNRGF_Enhance(img, minrecip, maxrecip, fn, minclip, False)
+  if initrotation != rotation:
+    enhance = Rotate(enhance, (enhance.shape[1]//2, enhance.shape[0]//2), rotation-initrotation)
   dist = min(cropradius * radius, CalcMinDistToEdge(srccenter, src.shape))
   (center, enhance) = CropToDist(enhance, center, dist)
 
@@ -848,17 +854,19 @@ def ProcessImage(src, minrecip, maxrecip, brightengamma, gammaweight, cropradius
   return enhance16
 
 # process a single image - from filename or URL
-def imageMain(filenameOrUrl, silent, hflip, vflip, align, date, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius):
+def imageMain(filenameOrUrl, silent, hflip, vflip, align, date, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius, darkclip, rotation):
   src, filename = FetchImage(filenameOrUrl)
   src = FlipImage(src, hflip, vflip)
 
   if align:
     src = AlignImage(src, date, silent)
+  elif rotation != 0.0:
+    src = sp.ndimage.rotate(src,rotation)
 
   if silent:
-    enhance16 = SilentProcessImage(src, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius)
+    enhance16 = SilentProcessImage(src, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius, darkclip)
   else:
-    enhance16 = ProcessImage(src, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius, filename)
+    enhance16 = ProcessImage(src, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius, darkclip, rotation, filename)
 
   return enhance16, filename
 
@@ -866,7 +874,6 @@ def imageMain(filenameOrUrl, silent, hflip, vflip, align, date, mincontrastadjus
 def ProcessArgs():
     fnlist = []
     parser = argparse.ArgumentParser(description='Process solar images')
-    #parser.add_argument('-d', action='store_true', help='Treat the argv[1] as a directory and process all files in it, implies -s')
     parser.add_argument('-t', '--type', type=str, default='tif', help='filetype to go along with -d, defaults to tif')
     parser.add_argument('-p', '--pattern', type=str, default='', help='String pattern to match for -d')
     parser.add_argument('-o', '--output', type=str, nargs='?', help='Output directory')
@@ -876,7 +883,13 @@ def ProcessArgs():
     parser.add_argument('-g', '--gongalign', type=str, default='', help='Date of GONG image to compare for auto-align, YYYY-MM-DD')
     parser.add_argument('-b', '--brighten', type=float, default=0.7, help='gamma value to brighten by, 1 = none, 0.1 = extreme bright, 2.0 darken')
     parser.add_argument('-w', '--brightenweight', type=float, default=0.5, help='weight to shift gamma brightening, 1 = use gamma curve, 0 = less brightening of darker pixels')
+    parser.add_argument('-e', '--enhance', type=str, default='1.5,3.0', help='contrast enhance min,max. 1 = no enhance, 5 = probably too much')
+    parser.add_argument('-c', '--crop', type=float, default=1.4, help='final crop radius in solar radii')
+    parser.add_argument('-r', '--rotate', type=float, default=0.0, help='rotation in degrees')
+    parser.add_argument('-d', '--darkclip', type=float, default=0.015, help='clip minimum after contrast enhancement and before normalization')
+    #parser.add_argument('-i', '--imagealign', type=str, nargs='?', help='file or URL for image to use for alignment')
     parser.add_argument('filename', nargs='?', type=str, help='Image file to process')
+
     args = parser.parse_args()
     directory = '.'
     silent = args.silent
@@ -903,10 +916,10 @@ def ProcessArgs():
     else:
       output = args.output
 
+    mincontrastadjust, maxcontrastadjust = [float(f) for f in args.enhance.split(",")]
     hflip = 'h' in args.flip
     vflip = 'v' in args.flip
-    return fnlist, silent, directory, hflip, vflip, output, args.append, args.gongalign, args.brighten, args.brightenweight
-
+    return fnlist, silent, directory, hflip, vflip, output, args.append, args.gongalign, args.brighten, args.brightenweight, mincontrastadjust, maxcontrastadjust, args.crop, args.rotate, args.darkclip #, args.imagealign
 def main():
   print(
 '''
@@ -941,7 +954,7 @@ different inputs, so give it a shot.
     print("Upload full disk solar image now, or click cancel to use default test image")
     fnlist[0] = urlToUse if shouldUseUrl else uploadFile()
   else:
-    fnlist, silent, directory, hflip, vflip, outputDirectory, append, gongAlignDate, brightengamma, gammaweight = ProcessArgs()
+    fnlist, silent, directory, hflip, vflip, outputDirectory, append, gongAlignDate, brightengamma, gammaweight, mincontrastadjust, maxcontrastadjust, cropradius, rotation, darkclip = ProcessArgs()
 
   suffix = f"minc_{str(mincontrastadjust)}_maxc_{str(maxcontrastadjust)}_g{str(brightengamma)}" if append else ""
   if gongAlignDate != "":
@@ -953,7 +966,7 @@ different inputs, so give it a shot.
 
   for fn in fnlist:
     fullName = fn if isUrl(fn) else directory + '/' + fn
-    enhance16, outfn = imageMain(fullName, silent, hflip, vflip, shouldAlignFirst, dateIfAligning, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius)
+    enhance16, outfn = imageMain(fullName, silent, hflip, vflip, shouldAlignFirst, dateIfAligning, mincontrastadjust, maxcontrastadjust, brightengamma, gammaweight, cropradius, darkclip, rotation)
     if not IN_COLAB:
       outfn = outputDirectory + '/' + os.path.basename(outfn) # replace input dir without output dir
       writeImage(enhance16, outfn, "enhancedcolor" + suffix)
