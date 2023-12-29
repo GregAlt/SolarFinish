@@ -880,16 +880,16 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
     # this is the cheap part to update
     def update_post_enhance():
         nonlocal enhanced
+        enhanced_rot = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation - init_rotation)
         if quadrant == 0:
-            im = enhanced
+            im = enhanced_rot
         else:
-            h = enhanced.shape[0]
+            h = enhanced_rot.shape[0]
             r = (quadrant - 1) // 2
             c = (quadrant - 1) % 2
-            im = enhanced[r * (h // 2):r * (h // 2) + h // 2, c * (h // 2):c * (h // 2) + h // 2]
+            im = enhanced_rot[r * (h // 2):r * (h // 2) + h // 2, c * (h // 2):c * (h // 2) + h // 2]
         brightened = brighten(im, gamma, gamma_weight)
         enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75))
-        enhance8 = rotate(enhance8, (enhance8.shape[1] // 2, enhance8.shape[0] // 2), rotation - init_rotation)
         cv.imshow('adjust', enhance8)
 
     # split updating the image into cheap and expensive parts, to allow faster refresh
