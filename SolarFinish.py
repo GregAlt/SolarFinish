@@ -661,8 +661,7 @@ def show_float01(im):
 # Enhancement
 
 def display_intermediate_results(polar_image, mean_image, unwarped_mean, diff, norm_std_dev, enhance_factor, enhanced,
-                                 fn,
-                                 silent):
+                                 fn, silent):
     print("Polar warp the image as an initial step to make a pseudo-flat")
     if not silent:
         show_float01(polar_image)
@@ -834,8 +833,8 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
     cv.createTrackbar('min adjust', 'adjust', 7, 100, on_change_min)
     cv.createTrackbar('max adjust', 'adjust', 30, 100, on_change_max)
     cv.createTrackbar('gamma', 'adjust', int(100 * gamma), 100, on_change_gamma)
-    cv.createTrackbar('gammaweight', 'adjust', int(100 * gamma_weight), 100, on_change_gamma_weight)
-    cv.createTrackbar('cropradius', 'adjust', int(50 * 0.2), 100, on_change_radius)
+    cv.createTrackbar('gamma weight', 'adjust', int(100 * gamma_weight), 100, on_change_gamma_weight)
+    cv.createTrackbar('crop radius', 'adjust', int(50 * 0.2), 100, on_change_radius)
     cv.createTrackbar('quadrant', 'adjust', 0, 4, on_change_quadrant)
     cv.createTrackbar('rotation', 'adjust', int(10 * rotation), 3600, on_change_rotation)
     cv.waitKey(0)
