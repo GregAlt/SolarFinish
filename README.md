@@ -1,19 +1,17 @@
 # SolarFinish
-App to apply finishing touches to full disk solar images
+Command line app to apply finishing touches to full disk solar images
 
-Assumes a grayscale full solar disk input image that has been through typical stacking and sharpening using tools like Autostakkert and Imppg, but no or minimal adjustment of intensity curves. It's also best for the input image to be uncropped to avoid artifacts near edges and to allow arbitrary cropping at the end. That said, it takes what you give it and tries its best as long as it can find a big circle in the image.
+SolarFinish can batch process a whole directory, or a single image specified by a local filename or remote URL. If a single file, you have the option of interactively adjusting the parameters and seeing the results immediately.
 
-Supports:
-- Automatic rotational/flip alignment to GONG image given a date
-- Manual horizontal or vertical flip
-- Manual rotation
-- Enhanced contrast using Convolutional Normalizing Radial Graded Filter
-- Automatic centering
-- Cropping to given solar radius multiple
-- Brightening with a blended gamma curve: `weight*np.power(im, gamma) + (1-weight)*(1-np.power(1-im,1/gamma))`
-- Simple colorization with linear RGB
-- Batch processing images in a directory
-- Processing image from filepath or remote URL
+The process consists of:
+- Rotation and flip by either automatic aligning to GONG image given a date, or giving explicit flip and rotation angle, or nothing
+- Automatic centering of the solar disk and cropping to a specified solar radius multiple
+- Adjust contrast of features on the disk and prominences using Convolutional Normalizing Radial Graded Filter (CNRGF) algorithm
+- Clip dark pixels to black to reduce noise
+- Brighten resulting grayscale image with a blended gamma-like curve: `weight*np.power(im, gamma) + (1-weight)*(1-np.power(1-im,1/gamma))`
+- Apply separate RGB gamma curves to colorize
+
+Assumes a full solar disk input image that has been through typical stacking and sharpening using tools like Autostakkert and Imppg, with no or minimal adjustment of intensity curves. It's also best for the input image to be uncropped to avoid artifacts near edges and to allow arbitrary cropping at the end. That said, it takes what you give it and tries its best as long as it can find a big circle in the image.
 
 ```
 usage: SolarFinish.py [-h] [-t TYPE] [-p PATTERN] [-o [OUTPUT]] [-s] [-a]
