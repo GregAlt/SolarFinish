@@ -22,6 +22,7 @@ __copyright__ = "Copyright (C) 2023 Greg Alt"
 # TODOS        - cleanup of functions responsible for main flow, moving towards a chain
 #                of optional filter tools.
 #              - clarify silent, interact, verbose modes
+#              - possibly add invert option - can just take 1- final grayscale
 #              - breakup/cleanup into multiple files (might mean abandoning Colab?)
 #              - more attention to removing artifacts/noise beyond limb
 #              - better control over min/max contrast adjustment params. Most flexible
@@ -56,6 +57,7 @@ from contextlib import redirect_stdout
 #
 # Circle finding
 
+# Assumes sun diameter is smaller than image, and sun isn't too small
 def is_valid_circle(shape, radius):
     size = min(shape[0], shape[1])
     if 2 * radius > size or 2 * radius < 0.25 * size:
@@ -63,6 +65,7 @@ def is_valid_circle(shape, radius):
     return True
 
 
+# Utility to convert ellipse data to center, radius
 def get_circle_data(ellipse):
     if ellipse is None:
         return (0, 0), 0
@@ -71,11 +74,13 @@ def get_circle_data(ellipse):
     return center, radius
 
 
+# Check that ellipse meets valid circle criteria
 def is_valid_ellipse(shape, ellipse):
     (center, radius) = get_circle_data(ellipse)
     return is_valid_circle(shape, radius)
 
 
+# Use Edge Drawing algorithm to find biggest valid circle, assumed to be the solar disk
 def find_circle(src):
     # convert to 8bit grayscale for ellipse-detecting
     gray = (src / 256).astype(np.uint8)
@@ -103,6 +108,8 @@ def find_circle(src):
     return ellipses[np.array([e[0][2] + max(e[0][3], e[0][4]) for e in ellipses]).argmax()]
 
 
+# Returns True plus center and radius in pixels, if solar disk circle is found
+# If it fails at first, maybe that's due to a blurry high-res image, so try on a smaller version
 def find_valid_circle(src):
     (center, radius) = get_circle_data(find_circle(src))
     if not is_valid_circle(src.shape, radius):
@@ -121,43 +128,52 @@ def find_valid_circle(src):
 #
 # Pixel format conversions
 
+# Simple linear conversion from RGB to single-channel grayscale
 def rgb2gray(rgb):
     return np.dot(rgb[..., :3], [0.2989, 0.5870, 0.1140])
 
 
+# Just replicate grayscale channel across RGB channels to make a three-channel grayscale image
 def gray2rgb(im):
     return cv.merge([im, im, im])
 
 
+# Colorize 0-1 float image with given RGB gamma values,
+# then return as 0-65535 16 bit image with B and R swapped
 def colorize16_bgr(result, r, g, b):
     bgr = (np.power(result, b), np.power(result, g), np.power(result, r))
     return float01_to_16bit(cv.merge(bgr))
 
 
+# Colorize 0-1 float image with given RGB gamma values, then return as 0-255 8 bit image in RGB format
 def colorize8_rgb(im, r, g, b):
     rgb = (np.power(im, r), np.power(im, g), np.power(im, b))
     return float01_to_8bit(cv.merge(rgb))
 
 
+# Given arbitrary image file, whether grayscale or RGB, 8 bit or 16 bit,
+# return as 0-65535 16 bit single-channel grayscale
 def force16_gray(im):
     im = rgb2gray(im) if len(im.shape) > 2 else im
     return cv.normalize(im.astype(np.uint16), None, 0, 65535, cv.NORM_MINMAX)
 
 
+# Given a single-channel grayscale 16 bit image, return a three-channel 0-255 8 bit grayscale image
 def gray16_to_rgb8(im):
     return gray2rgb((im / 256).astype(np.uint8))
 
 
-# convert image from float 0-1 to 16bit uint, works with grayscale or RGB
+# Convert image from float 0-1 to 16bit uint, works with grayscale or RGB
 def float01_to_16bit(im):
     return (im * 65535).astype(np.uint16)
 
 
-# convert image from float 0-1 to 8bit uint, works with grayscale or RGB
+# Convert image from float 0-1 to 8bit uint, works with grayscale or RGB
 def float01_to_8bit(im):
     return (im * 255).astype(np.uint8)
 
 
+# Convert image from 16bit uint to float 0-1, works with grayscale or RGB
 def to_float01_from_16bit(im):
     return im.astype(np.float32) / 65535.0
 
@@ -165,16 +181,21 @@ def to_float01_from_16bit(im):
 #
 # Image filtering and warp/un-warping
 
+# Return image rotated by the given angle in degrees, around the given center.
+# Keeps original image dimensions
 def rotate(im, center, angle_deg):
     rows, cols = im.shape[0:2]
     m = cv.getRotationMatrix2D(center, angle_deg, 1)
     return cv.warpAffine(im, m, (cols, rows))
 
 
+# Turns a centered solar disk image from a disk to a rectangle,
+# with rows being angle and columns being distance from center
 def polar_warp(img):
     return cv.linearPolar(img, (img.shape[0] / 2, img.shape[1] / 2), img.shape[0], cv.WARP_FILL_OUTLIERS)
 
 
+# Turns polar warped image from rectangle back to unwarped solar disk
 def polar_unwarp(img, shape):
     # INTER_AREA works best to remove artifacts
     # INTER_CUBIC works well except for a horizontal line artifact at angle = 0
@@ -184,6 +205,9 @@ def polar_unwarp(img, shape):
     return unwarped
 
 
+# Calc images with kernel mean and stddev per pixel, with n being fraction of
+# circle for kernel around each pixel. Example, 6 means kernels are 60 degree
+# arcs. Assumes polar image so that curved kernels are treated as rectangles.
 def get_mean_and_std_dev_image(polar_image, n):
     h = polar_image.shape[0]  # image is square, so h=w
     k = (h // (n * 2)) * 2 + 1  # find kernel size from fraction of circle, ensure odd
@@ -199,16 +223,18 @@ def get_mean_and_std_dev_image(polar_image, n):
     return mean_image, std_dev_image
 
 
-# pad the image on top and bottom to allow filtering with simulated wraparound
+# Pad the image on top and bottom to allow filtering with simulated wraparound
 def pad_for_wrap_around(inp, pad):
     return cv.vconcat([inp[inp.shape[0] - pad:, :], inp, inp[:pad, :]])
 
 
-# remove padding from top and bottom
+# Remove padding from top and bottom
 def remove_wrap_around_pad(input_padded, pad):
     return input_padded[pad:input_padded.shape[0] - pad, :]
 
 
+# Low-level func to find mean and std dev images for polar warped image,
+# ensuring results are as if kernels wrap around at top and bottom
 def mean_and_std_dev_filter_2d_with_wraparound(inp, kernel_size):
     # pad input image with half of kernel to simulate wraparound
     image_pad = pad_for_wrap_around(inp, kernel_size[0] // 2)
@@ -229,10 +255,16 @@ def mean_and_std_dev_filter_2d_with_wraparound(inp, kernel_size):
 #
 # Misc image processing
 
+# Adjust brightness with a blended function combining true gamma (which
+# emphasizes brightening of darker pixels) and a function that brightens
+# the same but emphasizes brightening the darker pixels. Weight of 1 means
+# just gamma, weight of 0 means the other function. weight of 0.5 puts the
+# bulge in the intensity curve in the middle.
 def brighten(im, gamma, gamma_weight):
     return gamma_weight * np.power(im, gamma) + (1 - gamma_weight) * (1 - np.power(1 - im, 1 / gamma))
 
 
+# Swap red and blue due to BGR vs RGB expectations in some OpenCV functions
 def swap_rb(im):
     blue = im[:, :, 0].copy()
     im[:, :, 0] = im[:, :, 2].copy()
@@ -240,10 +272,12 @@ def swap_rb(im):
     return im
 
 
+# Return image shrunk by div. So div=2 means half size
 def shrink(im, div):
     return cv.resize(im, np.floor_divide((im.shape[1], im.shape[0]), div))
 
 
+# Return an image with circle drawn on it for visualizing circle finding
 def add_circle(im, center, radius, color, thickness):
     cv.ellipse(im, center, (radius, radius), 0, 0, 360, color, thickness, cv.LINE_AA)
     return im
@@ -270,6 +304,8 @@ def center_and_expand(center, src):
     return new_center, out_img
 
 
+# Crop image to a square with given min distance from center. Return new image and center.
+# If specified min_dist is too large clamp it, because this function can only crop
 def crop_to_dist(src, center, min_dist):
     min_dist = min(math.ceil(min_dist), src.shape[0] // 2)  # don't allow a crop larger than the image
     new_center = (min_dist, min_dist)
@@ -278,6 +314,7 @@ def crop_to_dist(src, center, min_dist):
     return new_center, out_img
 
 
+# Given a center and image dimensions, find the shortest distance to image boundary
 def calc_min_dist_to_edge(center, shape):
     to_left, to_right = (center[0], shape[1] - center[0])
     to_top, to_bottom = (center[1], shape[0] - center[1])
@@ -285,10 +322,13 @@ def calc_min_dist_to_edge(center, shape):
     return min_dist
 
 
+# Given solar center co-ords and image, return an image with sun centered and
+# image cropped to largest square that fits. Also return new center co-ords
 def center_and_crop(center, src):
     return crop_to_dist(src, center, calc_min_dist_to_edge(center, src.shape))
 
 
+# Scale image so that solar radius matches new_rad in pixels
 def force_radius(im, center, rad, new_rad):
     scale = new_rad / rad
     im2 = cv.resize(im, (int(im.shape[1] * scale), int(im.shape[0] * scale)))
@@ -296,6 +336,7 @@ def force_radius(im, center, rad, new_rad):
     return center2, im2
 
 
+# Create a float image mask with 1 for pixels in solar disk, 0 for others
 def get_disk_mask(src, center, radius):
     # create 32 bit float disk mask
     disk_mask = np.zeros(src.shape[:2], dtype="float32")
@@ -318,7 +359,7 @@ def get_log_gabor_filter(n, f_0, theta_0, number_orientations):
     x, y = np.meshgrid(extent, extent)
 
     mid = int(n / 2)
-    # orientation component #
+    # orientation component
     theta = np.arctan2(y, x)
     center_angle = ((np.pi / number_orientations) * theta_0) if (f_0 % 2) \
         else ((np.pi / number_orientations) * (theta_0 + 0.5))
@@ -334,13 +375,10 @@ def get_log_gabor_filter(n, f_0, theta_0, number_orientations):
 
     orientation_component = np.exp(-0.5 * (d_theta / angle_bandwidth) ** 2)
 
-    # frequency component #
-    # go to polar space
-    raw = np.sqrt(x ** 2 + y ** 2)
-    # set origin to 1 as in the log space zero is not defined
-    raw[mid, mid] = 1
-    # go to log space
-    raw = np.log2(raw)
+    # frequency component
+    raw = np.sqrt(x ** 2 + y ** 2)  # go to polar space
+    raw[mid, mid] = 1  # set origin to 1 as in the log space zero is not defined
+    raw = np.log2(raw)  # go to log space
 
     center_scale = math.log2(n) - f_0
     draw = raw - center_scale
@@ -353,21 +391,22 @@ def get_log_gabor_filter(n, f_0, theta_0, number_orientations):
     return kernel
 
 
-# simpler function to do both fft and shift
+# Utility function to do both fft and shift
 def fft(im):
     return np.fft.fftshift(np.fft.fft2(im))
 
 
-# simpler function to do both inverse fft and shift
+# Utility function to do both inverse fft and shift
 def ifft(f):
     return np.real(np.fft.ifft2(np.fft.ifftshift(f)))
 
 
-# create the frequency space filter image for all orientations
+# Create the frequency space log-gabor filter image for all orientations
 def get_lgs(n, f_0, num_orientations):
     return [get_log_gabor_filter(n, f_0, x, num_orientations) for x in range(0, num_orientations)]
 
 
+# Apply log-gabor filter to image
 def apply_filter(im, lg):
     # apply fft to go to frequency space, apply filter, then inverse fft to go back to spatial
     # take absolute value, so we have only non-negative values, and merge into multichannel image
@@ -377,8 +416,10 @@ def apply_filter(im, lg):
 
 
 #
-# Implementation of algorithm in Aligning 'Dissimilar' Images Directly
+# Implementation of algorithm in Aligning 'Dissimilar' Images Directly (Yaser Sheikh, 2003)
+# Some assumptions and modifications made to improve performance
 
+# Internal function to calculate Rij image for similarity measure
 def get_rij(num, den, k):
     # TODO: cleanup this conditional code meant to exclude very small denominators
     den_shape = den.shape
@@ -391,6 +432,7 @@ def get_rij(num, den, k):
     return rij
 
 
+# Internal function to calculate n image given Rij, assume c=2 to simplify and boost performance
 def calc_n(rij):
     abs_rij = abs(rij)
     # c = 2#1 # what value for constant?
@@ -399,6 +441,7 @@ def calc_n(rij):
     return n
 
 
+# Calculate similarity sum, H, given n
 def get_similarity_sum(n):
     n_flat = np.zeros(n.shape[:2])
     for i in range(n.shape[2]):
@@ -407,6 +450,7 @@ def get_similarity_sum(n):
     return h, n_flat
 
 
+# Calculate high-level H similarity between two images, the core of alignment algorithm
 def similarity(im1, im2):
     # find the correlation coefficient at each pixel rij
     k = 5
@@ -436,6 +480,7 @@ def similarity(im1, im2):
 #
 # local and global search of alignment based on similarity evaluation
 
+# Visualization to show progress of alignment evaluations
 def show_eval(_gong_filtered, input_rot, _input_filtered, _h, n, _angle):
     if not IN_COLAB:
         cv.imshow("input_rot", input_rot)
@@ -443,6 +488,8 @@ def show_eval(_gong_filtered, input_rot, _input_filtered, _h, n, _angle):
         cv.waitKey(1)
 
 
+# Given prefiltered target image and input image plus mask and log-gabor,
+# evaluate similarity H for a given angle
 def local_search_evaluate(inp, lg, mask, gong_filtered, angle, show_eval_func):
     input_rot = rotate(inp, (inp.shape[1] // 2, inp.shape[0] // 2), angle)
     input_filtered = apply_filter(input_rot, lg) * mask
@@ -452,7 +499,9 @@ def local_search_evaluate(inp, lg, mask, gong_filtered, angle, show_eval_func):
     return H, n, input_rot, input_filtered
 
 
-# start with a rough peak, with 3 data points, iterate until narrow enough and return final peak
+# Start with a rough peak expected to be near the best angle, with 3 data
+# points, iterate until narrow enough and return final peak which is the
+# best matching angle
 def local_search(inp, lg, mask, gong_filtered, triple, stopping, report_callback):
     angles, h_list = triple
     while abs(angles[1] - angles[2]) > stopping:
@@ -469,6 +518,10 @@ def local_search(inp, lg, mask, gong_filtered, triple, stopping, report_callback
     return angles[1], h_list[1]
 
 
+# Roughly find neighborhood of best matching angle for given input and
+# pre-filtered target. Do a full step-by-step scan from start to end angle,
+# with count steps. Return the best angle and neighbors on either side, to
+# be used as input to local search
 def global_search(inp, lg, mask, gong_filtered, start, end, count, _best_angle, _best_sim, show_eval_func):
     angles = []
     h_list = []
@@ -487,6 +540,7 @@ def global_search(inp, lg, mask, gong_filtered, start, end, count, _best_angle, 
     return [angles[a], angles[peak], angles[b]], [h_list[a], h_list[peak], h_list[b]]
 
 
+# Expand, then center and crop to get a square image cropped to a size in terms of solar radii
 def center_and_crop_to_fixed_radius(center, radius, im, pixel_radius, solar_radii):
     # ensure we have enough buffer, scale to get fixed radius, then crop
     (center, im) = center_and_expand(center, im)
@@ -495,7 +549,7 @@ def center_and_crop_to_fixed_radius(center, radius, im, pixel_radius, solar_radi
     return center, im
 
 
-# assumes global search has already been done, supplying is_flipped and initial 3 results in triple
+# Assumes global alignment search has already been done, supplying is_flipped and initial 3 results in triple
 def local_search_helper(inp, is_flipped, lg, mask, gong, gong_filtered, triple, silent):
     input_search = cv.flip(inp, 1) if is_flipped else inp
     show_eval_func = None if silent else show_eval
@@ -503,7 +557,7 @@ def local_search_helper(inp, is_flipped, lg, mask, gong, gong_filtered, triple, 
     return angle, sim, is_flipped, True, triple, gong, input_search
 
 
-# does a full search including global and local
+# Does a full alignment search including global and local
 def full_search_helper(inp, _is_flipped, lg, mask, gong, gong_filtered, _triple, silent):
     show_eval_func = None if silent else show_eval
     triple = global_search(inp, lg, mask, gong_filtered, -180, 180, 20, 0, -1, show_eval_func)
@@ -519,6 +573,8 @@ def full_search_helper(inp, _is_flipped, lg, mask, gong, gong_filtered, _triple,
 #
 # high-level alignment implementation
 
+# Prepare source and target images for alignment by centering and cropping
+# and forcing to equal size solar disk
 def center_images_for_alignment(inp, gong, fixed_radius, solar_radii):
     (is_valid_gong, gong_center, gong_radius) = find_valid_circle(gong)
     if not is_valid_gong:
@@ -557,7 +613,7 @@ def align_images(gong, inp, fixed_radius, triple, is_flipped, silent, search_fun
     return search_func(inp, is_flipped, lg, mask, gong, gong_filtered, triple, silent)
 
 
-# do a single experiment with one image and one percent
+# Do a single alignment with one source image and one date and percentage time of day
 def align(inp, date, percent, triple, flipped, silent, search_func):
     gong = get_gong_image_for_date(datetime.datetime.strptime(date, '%Y/%m/%d'), percent)
     (angle, sim, flipped, matchFound, triple, gong_out, input_out) = align_images(gong, inp, 128, triple, flipped,
@@ -565,7 +621,7 @@ def align(inp, date, percent, triple, flipped, silent, search_func):
     return angle, sim, triple, flipped, gong, gong_out, inp, input_out
 
 
-# given an image and a date, find the best angle
+# Given an image and a date, find the best alignment angle using GONG images for that day
 def find_best_alignment(input_i, date, silent):
     (angle, sim, triple, flipped, gong_big, gong, input_big, inp) = align(input_i, date, 0.5, None, None, silent,
                                                                           full_search_helper)
@@ -584,6 +640,7 @@ def find_best_alignment(input_i, date, silent):
 #
 # File uploading, downloading, and rendering
 
+# Fetch a .fz image file by url, assumes conventions used by GONG
 def get_image_fz(url):
     trap = io.StringIO()
     with redirect_stdout(trap):  # hide the obnoxious progress bar
@@ -593,12 +650,14 @@ def get_image_fz(url):
     return cv.flip(img, 0)  # image co-ords are upside down
 
 
+# Fetch image file by url, return as 16-bit grayscale
 def get_image(url):
     fn = "testalign.png"
     open(fn, 'wb').write(requests.get(url, allow_redirects=True).content)
     return force16_gray(read_image(fn))  # force to single-channel 16-bit grayscale
 
 
+# Internal function to get GONG image url by date and percentage time of day
 def get_gong_image_url(date, percent, gong_root, file_end):
     yyyy = date.strftime("%Y")
     mm = date.strftime("%m")
@@ -612,20 +671,24 @@ def get_gong_image_url(date, percent, gong_root, file_end):
     return gong_full_path
 
 
+# Get GONG .fz raw image url by date and percentage time of day
 def get_gong_image_for_date(date, percent):
     # return getImage(GetGongImageURL(date, percent, "https://gong2.nso.edu/HA/hag/", '.jpg'))
     return get_image_fz(get_gong_image_url(date, percent, "https://nispdata.nso.edu/ftp/HA/haf/", 's.fz'))
 
 
+# Utility function to read image by filename
 def read_image(fn):
     return cv.imread(cv.samples.findFile(fn), cv.IMREAD_UNCHANGED | cv.IMREAD_ANYDEPTH)
 
 
+# Ask Colab user to select file to upload and return resulting filename on server
 def upload_file():
     keys = list(google.colab.files.upload().keys())
     return keys[0] if keys else ""
 
 
+# Write png image to disk with given suffix
 def write_image(im, fn, suffix):
     # strip full path after the last .
     without_extension = fn[::-1].split('.', 1)[1][::-1]  # reverse, split first ., take 2nd part, reverse again
@@ -634,10 +697,12 @@ def write_image(im, fn, suffix):
     return out_fn
 
 
+# Utility function to download file from Colab
 def download_image(im, fn, suffix):
     google.colab.files.download(write_image(im, fn, suffix))
 
 
+# Create a download button for a file in Colab
 def download_button(im, fn, suffix):
     if IN_COLAB:
         button = widgets.Button(description='Download Image')
@@ -645,6 +710,7 @@ def download_button(im, fn, suffix):
         IPython.display.display(button)
 
 
+# Visualization of RGB image, either in Colab or running locally
 def show_rgb(im):
     if IN_COLAB:
         plt.imshow(im)
@@ -654,6 +720,7 @@ def show_rgb(im):
         cv.waitKey(1)
 
 
+# Visualization of 0-1 float grayscale image, either in Colab or running locally
 def show_float01(im):
     show_rgb(colorize8_rgb(im, 1, 1, 1))
 
@@ -661,6 +728,7 @@ def show_float01(im):
 #
 # Enhancement
 
+# Visualization and download of intermediate images for enhancement process
 def display_intermediate_results(polar_image, mean_image, unwarped_mean, diff, norm_std_dev, enhance_factor, enhanced,
                                  fn, silent):
     print("Polar warp the image as an initial step to make a pseudo-flat")
@@ -735,7 +803,7 @@ def cnrgf_enhance(img, min_recip, max_recip, fn, min_clip, silent):
     return enhanced
 
 
-# returns a function that normalizes to within a given range
+# Returns a function that normalizes to within a given range
 def get_std_dev_scaler(min_recip, max_recip):
     return lambda sd: cv.normalize(sd, None, 1 / max_recip, 1 / min_recip, cv.NORM_MINMAX)
 
@@ -764,6 +832,7 @@ def enhance(img, n, min_recip, max_recip, min_clip):
 #
 # Interactive
 
+# Drive interactive adjustment and visualization of parameters with sliders, return final params selected
 def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius,
                        rotation):
     def on_change_min(val):
@@ -801,12 +870,14 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
         rotation = val / 10.0
         update_post_enhance()
 
+    # this is the expensive part
     def update_enhance():
         (new_center, new_img) = crop_to_dist(img, center, radius * crop_radius)
         im = shrink(new_img, 3) if quadrant == 0 else new_img
         nonlocal enhanced
         enhanced = enhance(im, 6, min_adj, max_adj, 0.01)
 
+    # this is the cheap part to update
     def update_post_enhance():
         nonlocal enhanced
         if quadrant == 0:
@@ -821,11 +892,11 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
         enhance8 = rotate(enhance8, (enhance8.shape[1] // 2, enhance8.shape[0] // 2), rotation - init_rotation)
         cv.imshow('adjust', enhance8)
 
+    # split updating the image into cheap and expensive parts, to allow faster refresh
     def update():
         update_enhance()
         update_post_enhance()
 
-    print("starting interactive")
     rotation %= 360.0
     init_rotation = rotation
     quadrant = 0
@@ -845,12 +916,13 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
 #
 # main - drive the high-level flow
 
+# Utility function to differentiate between local file and remote URL
 def is_url(filename_or_url):
     prefix = filename_or_url[:6]
     return prefix == "https:" or prefix == "http:/"
 
 
-# fetch an image as 16 bit grayscale, given a local filename or URL
+# Fetch an image as 16 bit grayscale, given a local filename or URL
 # also returns the filename on disk, in case image came from URL
 def fetch_image(filename_or_url):
     fn = filename_or_url
@@ -865,6 +937,7 @@ def fetch_image(filename_or_url):
     return src, fn
 
 
+# Flip an image, horizontally, vertically, or both
 def flip_image(im, horiz, vert):
     if horiz:
         im = cv.flip(im, 1)
@@ -873,7 +946,7 @@ def flip_image(im, horiz, vert):
     return im
 
 
-# align a single image, given a date to compare against
+# High-level flow to align a single image, given a date to compare against
 def align_image(im, date, silent):
     if not silent:
         print(f"Original image before alignment:")
@@ -896,7 +969,7 @@ def align_image(im, date, silent):
     return im
 
 
-# process a single image, silently
+# Process a single image, silently
 def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip):
     (is_valid, src_center, radius) = find_valid_circle(src)
     if not is_valid:
@@ -916,7 +989,7 @@ def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight
     return enhance16
 
 
-# process a single image, with verbose output
+# Process a single image, with verbose output. Includes interactive adjustment if interact=True
 def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, rotation, interact, fn):
     # find the solar disk circle
     (is_valid, src_center, radius) = find_valid_circle(src)
@@ -975,7 +1048,7 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
     return enhance16
 
 
-# process a single image - from filename or URL
+# Process a single image - from filename or URL
 def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_contrast_adjust, max_contrast_adjust,
                brighten_gamma, gamma_weight, crop_radius, dark_clip, rotation, interact):
     src, filename = fetch_image(filename_or_url)
@@ -996,7 +1069,7 @@ def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_
     return enhance16, filename
 
 
-# process command line arguments to get parameters, and get list of files to process
+# Process command line arguments to get parameters, and get list of files to process
 def process_args():
     fn_list = []
     parser = argparse.ArgumentParser(description='Process solar images')
