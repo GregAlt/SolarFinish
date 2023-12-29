@@ -21,6 +21,7 @@ __copyright__ = "Copyright (C) 2023 Greg Alt"
 
 # TODOS        - cleanup of functions responsible for main flow, moving towards a chain
 #                of optional filter tools.
+#              - clarify silent, interact, verbose modes
 #              - breakup/cleanup into multiple files (might mean abandoning Colab?)
 #              - more attention to removing artifacts/noise beyond limb
 #              - better control over min/max contrast adjustment params. Most flexible
@@ -916,7 +917,7 @@ def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight
 
 
 # process a single image, with verbose output
-def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, rotation, fn):
+def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, rotation, interact, fn):
     # find the solar disk circle
     (is_valid, src_center, radius) = find_valid_circle(src)
     if not is_valid:
@@ -945,7 +946,7 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
     download_button(float01_to_16bit(image_with_circle), fn, "withcircle")
 
     init_rotation = rotation
-    if not IN_COLAB:
+    if not IN_COLAB and interact:
         dist_to_edge = calc_min_dist_to_edge(src_center, src.shape)
         params = interactive_adjust(img, center, radius, dist_to_edge, min_recip, max_recip, brighten_gamma,
                                     gamma_weight,
@@ -976,7 +977,7 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
 
 # process a single image - from filename or URL
 def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_contrast_adjust, max_contrast_adjust,
-               brighten_gamma, gamma_weight, crop_radius, dark_clip, rotation):
+               brighten_gamma, gamma_weight, crop_radius, dark_clip, rotation, interact):
     src, filename = fetch_image(filename_or_url)
     src = flip_image(src, h_flip, v_flip)
 
@@ -990,8 +991,7 @@ def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_
                                          crop_radius, dark_clip)
     else:
         enhance16 = process_image(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                                  crop_radius,
-                                  dark_clip, rotation, filename)
+                                  crop_radius, dark_clip, rotation, interact, filename)
 
     return enhance16, filename
 
@@ -1020,7 +1020,8 @@ def process_args():
     parser.add_argument('-r', '--rotate', type=float, default=0.0, help='rotation in degrees')
     parser.add_argument('-d', '--darkclip', type=float, default=0.015,
                         help='clip minimum after contrast enhancement and before normalization')
-    # parser.add_argument('-i', '--imagealign', type=str, nargs='?', help='file or URL for image to use for alignment')
+    parser.add_argument('-i', '--interact', default=False, action='store_true', help='interactively adjust parameters')
+    # parser.add_argument('-x', '--imagealign', type=str, nargs='?', help='file or URL for image to use for alignment')
     parser.add_argument('filename', nargs='?', type=str, help='Image file to process')
 
     args = parser.parse_args()
@@ -1052,7 +1053,7 @@ def process_args():
     min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")]
     h_flip = 'h' in args.flip
     v_flip = 'v' in args.flip
-    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, min_contrast_adjust, max_contrast_adjust, args.crop, args.rotate, args.darkclip  # , args.imagealign
+    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, min_contrast_adjust, max_contrast_adjust, args.crop, args.rotate, args.darkclip, args.interact  # , args.imagealign
 
 
 def main():
@@ -1087,12 +1088,11 @@ different inputs, so give it a shot.
 
     # get the solar disk image
     if IN_COLAB:
-        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date = [
-                                                                                                    ""], False, ".", False, False, ".", False, ""
+        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, interact = ([""], False, ".", False, False, ".", False, "", False)
         print("Upload full disk solar image now, or click cancel to use default test image")
         fn_list[0] = url_to_use if should_use_url else upload_file()
     else:
-        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, min_contrast_adjust, max_contrast_adjust, crop_radius, rotation, dark_clip = process_args()
+        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, min_contrast_adjust, max_contrast_adjust, crop_radius, rotation, dark_clip, interact = process_args()
 
     suffix = f"minc_{str(min_contrast_adjust)}_maxc_{str(max_contrast_adjust)}_g{str(brighten_gamma)}" if append else ""
     if gong_align_date != "":
@@ -1102,11 +1102,14 @@ different inputs, so give it a shot.
     if fn_list[0] == "":
         fn_list[0] = fallback_url
 
+    if len(fn_list) > 1 or silent:
+        interact = False
+
     for fn in fn_list:
         full_name = fn if is_url(fn) else directory + '/' + fn
         enhance16, out_fn = image_main(full_name, silent, h_flip, v_flip, should_align_first, date_if_aligning,
                                        min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                                       crop_radius, dark_clip, rotation)
+                                       crop_radius, dark_clip, rotation, interact)
         if not IN_COLAB:
             out_fn = output_directory + '/' + os.path.basename(out_fn)  # replace input dir without output dir
             write_image(enhance16, out_fn, "enhancedcolor" + suffix)

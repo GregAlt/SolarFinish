@@ -6,6 +6,7 @@ Assumes a grayscale full solar disk input image that has been through typical st
 Supports:
 - Automatic rotational/flip alignment to GONG image given a date
 - Manual horizontal or vertical flip
+- Manual rotation
 - Enhanced contrast using Convolutional Normalizing Radial Graded Filter
 - Automatic centering
 - Cropping to given solar radius multiple
@@ -18,7 +19,7 @@ Supports:
 usage: SolarFinish.py [-h] [-t TYPE] [-p PATTERN] [-o [OUTPUT]] [-s] [-a]
                       [-f {h,v,hv}] [-g GONGALIGN] [-b BRIGHTEN]
                       [-w BRIGHTENWEIGHT] [-e ENHANCE] [-c CROP] [-r ROTATE]
-                      [-d DARKCLIP]
+                      [-d DARKCLIP] [-i]
                       [filename]
 
 Process solar images
@@ -56,4 +57,5 @@ options:
   -d DARKCLIP, --darkclip DARKCLIP
                         clip minimum after contrast enhancement and before
                         normalization
+  -i, --interact        interactively adjust parameters
 ```
