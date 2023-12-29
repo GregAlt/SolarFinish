@@ -29,9 +29,10 @@ __copyright__ = "Copyright (C) 2023 Greg Alt"
 #              - how to allow more continuous brightness of filaproms across limb?
 
 try:
-    from google.colab import files
+    import google.colab.files
+    import IPython.display
     IN_COLAB = True
-except:
+except ImportError:
     IN_COLAB = False
     import argparse
     import os
@@ -44,7 +45,6 @@ import scipy as sp
 import matplotlib.pyplot as plt
 import ipywidgets as widgets
 import requests
-import sys
 import datetime
 import urllib.request
 import astropy.io.fits
@@ -621,7 +621,7 @@ def read_image(fn):
 
 
 def upload_file():
-    keys = list(files.upload().keys())
+    keys = list(google.colab.files.upload().keys())
     return keys[0] if keys else ""
 
 
@@ -634,14 +634,14 @@ def write_image(im, fn, suffix):
 
 
 def download_image(im, fn, suffix):
-    files.download(write_image(im, fn, suffix))
+    google.colab.files.download(write_image(im, fn, suffix))
 
 
 def download_button(im, fn, suffix):
     if IN_COLAB:
         button = widgets.Button(description='Download Image')
         button.on_click(lambda x: download_image(im, fn, suffix))
-        display(button)
+        IPython.display.display(button)
 
 
 def show_rgb(im):
@@ -828,7 +828,7 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
     rotation %= 360.0
     init_rotation = rotation
     quadrant = 0
-    enhanced = None
+    enhanced = np.zeros(0)
     update()
     cv.createTrackbar('min adjust', 'adjust', 7, 100, on_change_min)
     cv.createTrackbar('max adjust', 'adjust', 30, 100, on_change_max)
