@@ -19,9 +19,7 @@ __copyright__ = "Copyright (C) 2023 Greg Alt"
 #                processing without noticeable artifacts. Also, generally cleaned
 #                up the script.
 
-# TODOS        - cleanup of variable/function names to be consistent and match coding
-#                standards
-#              - cleanup of functions responsible for main flow, moving towards a chain
+# TODOS        - cleanup of functions responsible for main flow, moving towards a chain
 #                of optional filter tools.
 #              - breakup/cleanup into multiple files (might mean abandoning Colab?)
 #              - more attention to removing artifacts/noise beyond limb
