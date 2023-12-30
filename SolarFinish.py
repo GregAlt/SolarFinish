@@ -728,44 +728,65 @@ def show_float01(im):
 #
 # Enhancement
 
-# Visualization and download of intermediate images for enhancement process
-def display_intermediate_results(polar_image, mean_image, unwarped_mean, diff, norm_std_dev, enhance_factor, enhanced,
-                                 fn, silent):
-    print("Polar warp the image as an initial step to make a pseudo-flat")
-    if not silent:
-        show_float01(polar_image)
-
-    print("Mean filter on polar warp image")
-    if not silent:
-        show_float01(mean_image)
-
-    print("Finally un-warp the mean image to get the pseudo-flat:")
-    if not silent:
-        show_float01(unwarped_mean)
-    download_button(float01_to_16bit(unwarped_mean), fn, "unwarpedmean")
-
-    print("Subtract pseudo-flat from image:")
-    if not silent:
-        show_float01(diff + 0.5)
-    download_button(float01_to_16bit(diff + 0.5), fn, "diff")
-
-    print("Result of standard deviation filter, to drive contrast enhancement")
-    if not silent:
-        show_float01(norm_std_dev)
-
-    print("Enhanced contrast in diff image:")
-    if not silent:
-        show_float01((diff * enhance_factor + 0.5).clip(min=0, max=1))
-    download_button(float01_to_16bit((diff * enhance_factor + 0.5).clip(min=0, max=1)), fn, "diff-enhanced")
-
-    print("Enhance contrast and add back to pseudo-flat:")
-    if not silent:
-        show_float01(enhanced)
-    download_button(float01_to_16bit(enhanced), fn, "enhancedgray")
+# Returns a function that normalizes to within a given range
+def get_std_dev_scaler(min_recip, max_recip):
+    return lambda sd: cv.normalize(sd, None, 1 / max_recip, 1 / min_recip, cv.NORM_MINMAX)
 
 
-# Do full enhancement from start to finish in one function, displaying intermediate
-# results. Takes a float 0-1 image with a centered solar disk.
+# Helper function for displaying and downloading image
+def display_and_download(im, text, should_download, fn, suffix):
+    print(text)
+    show_float01(im)
+    if should_download:
+        download_button(float01_to_16bit(im), fn, suffix)
+
+
+# Visualization and download of intermediate images for enhancement process, for part 1
+def display_cnrgf_intermediate_1(polar_image, mean_image, unwarped_mean, fn):
+    display_and_download(polar_image, "Polar warp the image as an initial step to make a pseudo-flat", False, fn, "")
+    display_and_download(mean_image, "Mean filter on polar warp image", False, fn, "")
+    display_and_download(unwarped_mean, "Finally un-warp the mean image to get the pseudo-flat:", True, fn, "unwarpedmean")
+
+
+# Visualization and download of intermediate images for enhancement process, for part 2
+def display_cnrgf_intermediate_2(diff, norm_std_dev, enhance_factor, fn):
+    display_and_download(diff + 0.5, "Subtract pseudo-flat from image:", True, fn, "diff")
+    display_and_download(norm_std_dev, "Result of standard deviation filter, to drive contrast enhancement", False, fn, "")
+    display_and_download((diff * enhance_factor + 0.5).clip(min=0, max=1), "Enhanced contrast in diff image:", True, fn, "diff-enhanced")
+
+
+# CNRGF split into two parts, first part does expensive convolutions
+def cnrgf_enhance_part1(img, n, show_intermediate_1, fn):
+    # find mean and standard deviation image from polar-warped image, then un-warp
+    polar_image = polar_warp(img)
+    mean_image, std_devs = get_mean_and_std_dev_image(polar_image, n)
+    unwarped_mean = polar_unwarp(mean_image, img.shape)
+    unwarped_std_dev = polar_unwarp(std_devs, img.shape)
+
+    if show_intermediate_1 is not None:
+        show_intermediate_1(polar_image, mean_image, unwarped_mean, fn)
+    return unwarped_mean, unwarped_std_dev
+
+
+# CNRGF split into two parts, second part is cheaper and has tunable parameters
+# using scaleStdDev as a function that has tunable parameters baked into it.
+def cnrgf_enhance_part2(img, mean_and_stddev, scale_std_dev, show_intermediate_2, fn):
+    # adjust range of standard deviation image to get preferred range of contrast enhancement
+    unwarped_mean, unwarped_std_dev = mean_and_stddev
+    norm_std_dev = scale_std_dev(unwarped_std_dev)
+
+    # subtract mean, divide by standard deviation, and add back mean
+    enhance_factor = np.reciprocal(norm_std_dev)
+    diff = img - unwarped_mean
+    enhanced = diff * enhance_factor + unwarped_mean
+
+    if show_intermediate_2 is not None:
+        show_intermediate_2(diff, norm_std_dev, enhance_factor, fn)
+    return enhanced
+
+
+# Do full CNRGF enhancement from start to finish, displaying intermediate results. Takes a
+# float 0-1 image with a centered solar disk.
 #
 # This uses a process I call Convolutional Normalizing Radial Graded Filter (CNRGF).
 # CNRGF was developed largely independently of but was influenced by Druckmullerova's
@@ -778,55 +799,12 @@ def display_intermediate_results(polar_image, mean_image, unwarped_mean, diff, n
 # radius, but the problems have many similarities, and it should be possible to use the
 # algorithms interchangeably for solar images more generally, including full disk
 # white light images.
-def cnrgf_enhance(img, min_recip, max_recip, fn, min_clip, silent):
-    # find mean and standard deviation image from polar-warped image, then un-warp
-    polar_image = polar_warp(img)
-    (mean_image, std_devs) = get_mean_and_std_dev_image(polar_image, 6)
-    unwarped_mean = polar_unwarp(mean_image, img.shape)
-    unwarped_std_dev = polar_unwarp(std_devs, img.shape)
-
-    # adjust range of standard deviation image to get preferred range of contrast enhancement
-    norm_std_dev = cv.normalize(unwarped_std_dev, None, 1 / max_recip, 1 / min_recip, cv.NORM_MINMAX)
-
-    # subtract mean, divide by standard deviation, and add back mean
-    enhance_factor = np.reciprocal(norm_std_dev)
-    diff = img - unwarped_mean
-    enhanced = diff * enhance_factor + unwarped_mean
-
-    # final normalize and clip
-    enhanced = enhanced.clip(min=min_clip)  # don't want sunspot pixels blowing up the normalization
-    enhanced = cv.normalize(enhanced, None, 0, 1, cv.NORM_MINMAX).clip(min=0).clip(max=1)
-
-    display_intermediate_results(polar_image, mean_image, unwarped_mean, diff, norm_std_dev, enhance_factor, enhanced,
-                                 fn,
-                                 silent)
-    return enhanced
-
-
-# Returns a function that normalizes to within a given range
-def get_std_dev_scaler(min_recip, max_recip):
-    return lambda sd: cv.normalize(sd, None, 1 / max_recip, 1 / min_recip, cv.NORM_MINMAX)
-
-
-# CNRGF split into two parts, first part does expensive compute
-def cnrgf_enhance_part1(img, n):
-    (mean_image, std_devs) = get_mean_and_std_dev_image(polar_warp(img), n)
-    return polar_unwarp(mean_image, img.shape), polar_unwarp(std_devs, img.shape)
-
-
-# CNRGF split into two parts, second part is cheaper and has tunable parameters
-# using scaleStdDev as a function that has tunable parameters baked into it.
-def cnrgf_enhance_part2(img, mean_and_stddev, scale_std_dev):
-    (unwarped_mean, unwarped_std_dev) = mean_and_stddev
-    norm_std_dev = scale_std_dev(unwarped_std_dev)
-    return (img - unwarped_mean) * np.reciprocal(norm_std_dev) + unwarped_mean
-
-
-# CNRGF combining the two parts in one go
-def enhance(img, n, min_recip, max_recip, min_clip):
-    mean_and_stddev = cnrgf_enhance_part1(img, n)
-    e = cnrgf_enhance_part2(img, mean_and_stddev, get_std_dev_scaler(min_recip, max_recip))
-    return cv.normalize(e.clip(min=min_clip), None, 0, 1, cv.NORM_MINMAX).clip(min=0).clip(max=1)
+def cnrgf_enhance(img, n, min_recip, max_recip, min_clip, show_intermediate_1, show_intermediate_2, fn):
+    mean_and_stddev = cnrgf_enhance_part1(img, n, show_intermediate_1, fn)
+    enhanced = cnrgf_enhance_part2(img, mean_and_stddev, get_std_dev_scaler(min_recip, max_recip), show_intermediate_2, fn)
+    clipped = enhanced.clip(min=min_clip)
+    normalized = cv.normalize(clipped, None, 0, 1, cv.NORM_MINMAX).clip(min=0).clip(max=1)
+    return normalized
 
 
 #
@@ -870,12 +848,17 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
         rotation = val / 10.0
         update_post_enhance()
 
+    def on_change_clip(val):
+        nonlocal min_clip
+        min_clip = val / 1000.0
+        update()
+
     # this is the expensive part
     def update_enhance():
         (new_center, new_img) = crop_to_dist(img, center, radius * crop_radius)
         im = shrink(new_img, 3) if quadrant == 0 else new_img
         nonlocal enhanced
-        enhanced = enhance(im, 6, min_adj, max_adj, 0.01)
+        enhanced = cnrgf_enhance(im, 6, min_adj, max_adj, min_clip, None, None, "")
 
     # this is the cheap part to update
     def update_post_enhance():
@@ -906,6 +889,7 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
     cv.createTrackbar('max adjust', 'adjust', 30, 100, on_change_max)
     cv.createTrackbar('gamma', 'adjust', int(100 * gamma), 100, on_change_gamma)
     cv.createTrackbar('gamma weight', 'adjust', int(100 * gamma_weight), 100, on_change_gamma_weight)
+    cv.createTrackbar('dark clip', 'adjust', int(1000 * min_clip), 100, on_change_clip)
     cv.createTrackbar('crop radius', 'adjust', int(50 * 0.2), 100, on_change_radius)
     cv.createTrackbar('quadrant', 'adjust', 0, 4, on_change_quadrant)
     cv.createTrackbar('rotation', 'adjust', int(10 * rotation), 3600, on_change_rotation)
@@ -979,7 +963,7 @@ def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight
     (center, centered) = center_and_expand(src_center, src)
     img = to_float01_from_16bit(centered)
 
-    enhanced = cnrgf_enhance(img, min_recip, max_recip, "", min_clip, True)
+    enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, "")
     dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
     (center, enhanced) = crop_to_dist(enhanced, center, dist)
 
@@ -1028,7 +1012,7 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
         print(
             f"Command line:\nSolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius} --rotate {rotation} --darkclip {min_clip}\n")
 
-    enhanced = cnrgf_enhance(img, min_recip, max_recip, fn, min_clip, False)
+    enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, fn)
     if init_rotation != rotation:
         enhanced = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation - init_rotation)
     dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
