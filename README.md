@@ -21,6 +21,15 @@ or
 ```
    SolarFinish.exe --interact https://www.cloudynights.com/uploads/gallery/album_24370/gallery_79290_24370_2225872.png
 ```
+## Interactive Mode
+When running in interactive mode with the --interact or -i command line arguments, you're presented with sliders that change the different parameters, showing the result in realtime. When you are finished, and hit a key in the window, it exits, writing out the result grayscale and colorized images, and displaying the command line parameters corresponding to your parameter choices. The GUI is crude, but functional. Here's an explanation for the sliders:
+- **Min/Max Adjust**: these control how much contrast enhancement is applied. Min controls how much contrast is exaggerated in areas that already have high contrast, and Max controls contrast enhancement in areas that begin with low contrast. Min should be less than max, and the smaller the value, the less enhancement.
+-  **Gamma** controls brightening after the contrast enhancement. Lower is brighter, higher is darker.
+-  **Gamma Weight** shifts the gamma curve. 1 means a simple gamma curve where the bulk of the brightening is on darker pixels -- this can be a problem because it emphasizes background glow and noise beyond the solar limb. 0 means shift emphasis to brighter pixels, generally in solar disk. In the middle blends between the two. It helps to use Quadrant to zoom in on prominences when adjusting this to see the subtle effect.
+-  **Dark Clip** controls the level at which pixels are clipped to black. This should stay very low, as raising too high will eat away at the faint fringes of prominences. Too low, though, and you might see too much background glow and noise.
+-  **Crop Radius** controls the size of the final image crop
+-  **Quadrant** lets you zoom into different quadrants to better see effects at a pixel level. This doesn't have any effect on the generated image.
+-  **Rotation** controls the rotation of the image, to let you manually align
 
 More details:
 ```
