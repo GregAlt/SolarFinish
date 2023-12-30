@@ -13,6 +13,16 @@ The process consists of:
 
 Assumes a full solar disk input image that has been through typical stacking and sharpening using tools like Autostakkert and Imppg, with no or minimal adjustment of intensity curves. It's also best for the input image to be uncropped to avoid artifacts near edges and to allow arbitrary cropping at the end. That said, it takes what you give it and tries its best as long as it can find a big circle in the image.
 
+Some things to try out first, run in interactive mode to process a local image file or a remote URL image:
+```
+   SolarFinish.exe --interact mysolarimage.tif
+```
+or
+```
+   SolarFinish.exe --interact https://www.cloudynights.com/uploads/gallery/album_24370/gallery_79290_24370_2225872.png
+```
+
+More details:
 ```
 usage: SolarFinish.py [-h] [-t TYPE] [-p PATTERN] [-o [OUTPUT]] [-s] [-a]
                       [-f {h,v,hv}] [-g GONGALIGN] [-b BRIGHTEN]
