@@ -578,11 +578,11 @@ def full_search_helper(inp, _is_flipped, lg, mask, gong, gong_filtered, _triple,
 def center_images_for_alignment(inp, gong, fixed_radius, solar_radii):
     (is_valid_gong, gong_center, gong_radius) = find_valid_circle(gong)
     if not is_valid_gong:
-        print("Error: Couldn't find valid circle for GONG solar disk!")
+        print("Error: Couldn't find valid circle for GONG solar disk!", flush=True)
 
     (is_valid_input, input_center, input_radius) = find_valid_circle(inp)
     if not is_valid_input:
-        print("Error: Couldn't find valid circle for input solar disk!")
+        print("Error: Couldn't find valid circle for input solar disk!", flush=True)
 
     if is_valid_gong and is_valid_input:
         (gong_center, gong) = center_and_crop_to_fixed_radius(gong_center, gong_radius, to_float01_from_16bit(gong),
@@ -595,6 +595,7 @@ def center_images_for_alignment(inp, gong, fixed_radius, solar_radii):
     return is_valid_gong, gong, gong_center, is_valid_input, inp, input_center
 
 
+# Do a single alignment with one source image and target image
 def align_images(gong, inp, fixed_radius, triple, is_flipped, silent, search_func):
     (is_valid_gong, gong, gong_center, is_valid_input, inp, input_center) = center_images_for_alignment(inp, gong,
                                                                                                         fixed_radius,
@@ -735,7 +736,7 @@ def get_std_dev_scaler(min_recip, max_recip):
 
 # Helper function for displaying and downloading image
 def display_and_download(im, text, should_download, fn, suffix):
-    print(text)
+    print(text, flush=True)
     show_float01(im)
     if should_download:
         download_button(float01_to_16bit(im), fn, suffix)
@@ -743,16 +744,16 @@ def display_and_download(im, text, should_download, fn, suffix):
 
 # Visualization and download of intermediate images for enhancement process, for part 1
 def display_cnrgf_intermediate_1(polar_image, mean_image, unwarped_mean, fn):
-    display_and_download(polar_image, "Polar warp the image as an initial step to make a pseudo-flat", False, fn, "")
-    display_and_download(mean_image, "Mean filter on polar warp image", False, fn, "")
-    display_and_download(unwarped_mean, "Finally un-warp the mean image to get the pseudo-flat:", True, fn, "unwarpedmean")
+    #display_and_download(polar_image, "Displaying intermediate image: polar warp the image as an initial step to make a pseudo-flat", False, fn, "")
+    #display_and_download(mean_image, "Displaying intermediate image: mean filter on polar warp image", False, fn, "")
+    display_and_download(unwarped_mean, "Displaying intermediate image: unwarped mean pseudo-flat", True, fn, "unwarpedmean")
 
 
 # Visualization and download of intermediate images for enhancement process, for part 2
 def display_cnrgf_intermediate_2(diff, norm_std_dev, enhance_factor, fn):
-    display_and_download(diff + 0.5, "Subtract pseudo-flat from image:", True, fn, "diff")
-    display_and_download(norm_std_dev, "Result of standard deviation filter, to drive contrast enhancement", False, fn, "")
-    display_and_download((diff * enhance_factor + 0.5).clip(min=0, max=1), "Enhanced contrast in diff image:", True, fn, "diff-enhanced")
+    display_and_download(diff + 0.5, "Displaying intermediate image: subtract pseudo-flat from input image", True, fn, "diff")
+    display_and_download(norm_std_dev, "Displaying intermediate image: standard deviation filter, to drive contrast enhancement", False, fn, "")
+    display_and_download((diff * enhance_factor + 0.5).clip(min=0, max=1), "Displaying intermediate image: enhanced contrast in diff image", True, fn, "diff-enhanced")
 
 
 # CNRGF split into two parts, first part does expensive convolutions
@@ -933,19 +934,18 @@ def flip_image(im, horiz, vert):
 # High-level flow to align a single image, given a date to compare against
 def align_image(im, date, silent):
     if not silent:
-        print(f"Original image before alignment:")
+        print(f"Aligning with GONG image from {date}. This might take a minute. Displaying input image before alignment:", flush=True)
         show_float01(to_float01_from_16bit(im))
-        print(f"Aligning with GONG image from {date}. This might take a minute.")
 
     date = date.replace('-', '/')
     best = find_best_alignment(im, date, silent)
     percent, angle, flipped, sim, gong_big, gong, input_big, inp = best
 
     if not silent:
-        flipped_text = 'and horizontally flipped' if flipped else ''
-        print(f"Best angle is {angle} {flipped_text}")
-        print(f"GONG image used for alignment:")
+        print(f"Displaying GONG image used for alignment:", flush=True)
         show_float01(gong)
+        print(f"\nAlignment result: angle is {angle}{' and horizontally flipped' if flipped else ''}. Equivalent to command line args:", flush=True)
+        print(f"     --rotate {angle} {'--flip h' if flipped else ''}", flush=True)
 
     if flipped:
         im = cv.flip(im, 1)
@@ -978,29 +978,24 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
     # find the solar disk circle
     (is_valid, src_center, radius) = find_valid_circle(src)
     if not is_valid:
-        print("Couldn't find valid circle for solar disk!")
+        print("Error: Couldn't find valid circle for input solar disk!", flush=True)
         return None
 
     # show original image as uploaded
-    print(
-        f"\nOriginal image size: {src.shape[1]},{src.shape[0]}  Circle found with radius {radius} and center {src_center[0]},{src_center[1]}")
+    print(f"\nDisplaying input image, size is {src.shape[1]},{src.shape[0]}:", flush=True)
     show_float01(to_float01_from_16bit(src))
 
     # use an expanded/centered grayscale 0-1 float image for all calculations
     (center, centered) = center_and_expand(src_center, src)
     img = to_float01_from_16bit(centered)
-    print(f"centered image size: {centered.shape[1]},{centered.shape[0]}  New center: {center[0]},{center[1]}")
     show_float01(img)
-    download_button(centered, fn, "centered")
 
     # show image with circle drawn
     image_with_circle = add_circle(gray2rgb(img), center, radius, (1, 0, 0), 3)
     solar_radius_in_km = 695700
     print(
-        f"centered image with solar limb circle highlighted. Circle should be very close to the edge of the photosphere. Pixel size is about {solar_radius_in_km / radius:.1f}km")
+        f"Circle found with radius {radius} and center {src_center[0]},{src_center[1]}. Pixel size is about {solar_radius_in_km / radius:.1f}km. Displaying sun with circle found--should be very close to the edge of the photosphere.", flush=True)
     show_rgb(image_with_circle)
-    image_with_circle = add_circle(gray2rgb(img), center, radius, (0, 0, 1), 1)
-    download_button(float01_to_16bit(image_with_circle), fn, "withcircle")
 
     init_rotation = rotation
     if not IN_COLAB and interact:
@@ -1009,8 +1004,9 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
                                     gamma_weight,
                                     min_clip, crop_radius, rotation)
         (min_recip, max_recip, brighten_gamma, gamma_weight, min_clip, crop_radius, rotation) = params
+        print("\nCommand line equivalent to adjusted parameters:")
         print(
-            f"Command line:\nSolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius} --rotate {rotation} --darkclip {min_clip}\n")
+            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius} --rotate {rotation} --darkclip {min_clip}\n", flush=True)
 
     enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, fn)
     if init_rotation != rotation:
@@ -1020,13 +1016,13 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
 
     # brighten and colorize
     enhanced = brighten(enhanced, brighten_gamma, gamma_weight)
-    print("Brighten image:")
+    print("Displaying grayscale enhanced result:", flush=True)
     show_float01(enhanced)
     download_button(float01_to_16bit(enhanced), fn, "enhancedgraybright")
 
     enhance8 = colorize8_rgb(enhanced, 0.5, 1.25, 3.75)
     enhance16 = colorize16_bgr(enhanced, 0.5, 1.25, 3.75)
-    print("And finally colorize image:")
+    print("Displaying colorized enhanced result:", flush=True)
     show_rgb(enhance8)
     download_button(enhance16, fn, "enhancedcolor")
     return enhance16
@@ -1099,7 +1095,7 @@ def process_args():
             fn_list = [args.filename]
 
     if len(fn_list) == 0:
-        print(f"No files found, using sample image")
+        print(f"No input image files found, using sample image", flush=True)
         fn_list.append("")
 
     if not args.output:
@@ -1116,19 +1112,13 @@ def process_args():
 def main():
     print(
         '''
-This solar image processing python script is an experimental work in progress.
-It is intended for my own use, but I'm sharing so others can look at the code
-and give feedback. Feel free to use, but I make no promises. It is likely that
-it will fail on images from cameras and telescopes different from my own. Expect
-it to change without warning as I continue to tinker with it, and do not expect
-tech support.
-
-I've tried to make it as parameter-free as possible, but some important
-parameters are still hardcoded in the script.
-
-All that said, it has generated some compelling results from a range of
-different inputs, so give it a shot.
-''')
+SolarFinish is an early work in progress. Originally built for my personal 
+use, I've incorporated contributions from others and tried to make it more 
+generally useful so others can benefit from easier post-processing with 
+better results. Feel free to use, but I make no promises. It may fail on 
+images from cameras and telescopes different from my own. Expect it to 
+continue to evolve, and don't expect much tech support.
+''', flush=True)
 
     min_contrast_adjust = 1.7  # @param {type:"number"}   # 1.6
     max_contrast_adjust = 3.0  # @param {type:"number"}   # 4.0
