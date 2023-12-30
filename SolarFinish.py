@@ -34,6 +34,8 @@ try:
     import google.colab.files
     import IPython.display
     IN_COLAB = True
+    import matplotlib.pyplot as plt
+    import ipywidgets as widgets
 except ImportError:
     IN_COLAB = False
     import argparse
@@ -44,8 +46,6 @@ import math
 import numpy as np
 import cv2 as cv
 import scipy as sp
-import matplotlib.pyplot as plt
-import ipywidgets as widgets
 import requests
 import datetime
 import urllib.request
