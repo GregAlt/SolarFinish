@@ -1,7 +1,7 @@
 # SolarFinish
-Command line app to apply finishing touches to full disk solar images
+SolarFinish is an early work in progress. Originally built for my personal use, I've incorporated contributions from others and tried to make it more generally useful so others can benefit from easier post-processing with better results. Feel free to use, but I make no promises. It may fail on images from cameras and telescopes different from my own. Expect it to continue to evolve, and don't expect much tech support.
 
-SolarFinish can batch process a whole directory, or a single image specified by a local filename or remote URL. If a single file, you have the option of interactively adjusting the parameters and seeing the results immediately.
+SolarFinish is a command line python app that can batch process a whole directory, or a single image specified by a local filename or remote URL. If a single file, you have the option of interactively adjusting the parameters and seeing the results immediately.
 
 The process consists of:
 - Rotation and flip by either automatic aligning to GONG image given a date, or giving explicit flip and rotation angle, or nothing
@@ -12,6 +12,8 @@ The process consists of:
 - Apply separate RGB gamma curves to colorize
 
 Assumes a full solar disk input image that has been through typical stacking and sharpening using tools like Autostakkert and Imppg, with no or minimal adjustment of intensity curves. It's also best for the input image to be uncropped to avoid artifacts near edges and to allow arbitrary cropping at the end. That said, it takes what you give it and tries its best as long as it can find a big circle in the image.
+
+If you are comfortable with running python scripts locally, you should be able to use pip to install necessary packages and just run SolarFinish.py directly. If you aren't able to do that but have a Windows PC, I've checked in dist/SolarFinish.exe, built with pyinstaller. You can download it by navigating to the file in github and clicking the "raw" button. Be aware that the executable is rather large--about 100M. This is due to the fact that this script depends on multiple modules, each of which contributes DLLs, sometimes redundant copies. This really adds up, and it's not trivial to trim out unneeded binaries. You'll probably also find that your browser and operating system are (wisely) wary of letting you run random executables downloaded from the internet. I wouldn't knowingly upload any viruses, but you'd be smart to make sure you scan any executables before running them, regardless the source, and even then not run untrusted executables at all if your PC has valuable, unbackedup files.
 
 Some things to try out first... to run in interactive mode to process a local image file or a remote URL image:
 ```
