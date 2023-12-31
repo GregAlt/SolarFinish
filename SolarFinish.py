@@ -52,6 +52,7 @@ import urllib.request
 import astropy.io.fits
 import io
 from contextlib import redirect_stdout
+import PySimpleGUI as sg
 
 
 #
@@ -694,6 +695,7 @@ def write_image(im, fn, suffix):
     # strip full path after the last .
     without_extension = fn[::-1].split('.', 1)[1][::-1]  # reverse, split first ., take 2nd part, reverse again
     out_fn = without_extension + '-' + suffix + '.png'
+    print(f"writing: {out_fn}")
     cv.imwrite(out_fn, im)
     return out_fn
 
@@ -1049,6 +1051,11 @@ def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_
     return enhance16, filename
 
 
+def popup_get_file(save_as, folder, default):
+    filename = sg.popup_get_file('', save_as=save_as, no_window=True,initial_folder=folder, default_path=default)
+    return filename
+
+
 # Process command line arguments to get parameters, and get list of files to process
 def process_args():
     fn_list = []
@@ -1093,10 +1100,17 @@ def process_args():
                 fn_list = [args.filename]
         elif is_url(args.filename):
             fn_list = [args.filename]
+    elif not IN_COLAB:
+        args.interact = True # no file specified, force interactive mode
+        fn = popup_get_file(False, directory, "")
+        if os.path.isfile(fn):
+            directory = os.path.dirname(fn)
+            fn_list = [os.path.basename(fn)]
+            print(f"Selected image: {fn}")
 
-    if len(fn_list) == 0:
+    if len(fn_list) == 0 or fn_list[0] == "":
+        fn_list = [""]
         print(f"No input image files found, using sample image", flush=True)
-        fn_list.append("")
 
     if not args.output:
         output = directory
