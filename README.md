@@ -1,7 +1,7 @@
 # SolarFinish
-Experimental, pre-alpha command line python app to apply finishing touches to full disk solar images
+SolarFinish is an early work in progress. Originally built for my personal use, I've incorporated contributions from others and tried to make it more generally useful so others can benefit from easier post-processing with better results. Feel free to use, but I make no promises. It may fail on images from cameras and telescopes different from my own. Expect it to continue to evolve, and don't expect much tech support.
 
-SolarFinish can batch process a whole directory, or a single image specified by a local filename or remote URL. If a single file, you have the option of interactively adjusting the parameters and seeing the results immediately.
+SolarFinish is a command line python app that can batch process a whole directory, or a single image specified by a local filename or remote URL. If a single file, you have the option of interactively adjusting the parameters and seeing the results immediately.
 
 The process consists of:
 - Rotation and flip by either automatic aligning to GONG image given a date, or giving explicit flip and rotation angle, or nothing
