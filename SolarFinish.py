@@ -818,43 +818,48 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
                        rotation):
     def on_change_min(val):
         nonlocal min_adj
-        min_adj = 1.0 + val / 10.0
+        min_adj = val
         update()
 
     def on_change_max(val):
         nonlocal max_adj
-        max_adj = 1.0 + val / 10.0
+        max_adj = val
         update()
 
     def on_change_gamma(val):
         nonlocal gamma
-        gamma = val / 100.0
+        gamma = val
         update_post_enhance()
 
     def on_change_gamma_weight(val):
         nonlocal gamma_weight
-        gamma_weight = val / 100.0
+        gamma_weight = val
         update_post_enhance()
 
     def on_change_quadrant(val):
         nonlocal quadrant
-        quadrant = val
+        quadrant = int(val)
         update()
 
     def on_change_radius(val):
         nonlocal crop_radius
-        crop_radius = 1.0 + val / 50.0
+        crop_radius = val
         update()
 
     def on_change_rotation(val):
         nonlocal rotation
-        rotation = val / 10.0
+        rotation = val
         update_post_enhance()
 
     def on_change_clip(val):
         nonlocal min_clip
-        min_clip = val / 1000.0
+        min_clip = val
         update()
+
+    def on_change_colorize(val):
+        nonlocal show_colorized
+        show_colorized = val
+        update_post_enhance()
 
     # this is the expensive part
     def update_enhance():
@@ -875,7 +880,7 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
             c = (quadrant - 1) % 2
             im = enhanced_rot[r * (h // 2):r * (h // 2) + h // 2, c * (h // 2):c * (h // 2) + h // 2]
         brightened = brighten(im, gamma, gamma_weight)
-        enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75))
+        enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75)) if show_colorized else swap_rb(colorize8_rgb(brightened, 1, 1, 1))
         cv.imshow('adjust', enhance8)
 
     # split updating the image into cheap and expensive parts, to allow faster refresh
@@ -887,18 +892,31 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
     init_rotation = rotation
     quadrant = 0
     enhanced = np.zeros(0)
+    show_colorized = True
     update()
-    cv.createTrackbar('min adjust', 'adjust', int(10 * (min_adj - 1.0)), 100, on_change_min)
-    cv.createTrackbar('max adjust', 'adjust', int(10 * (max_adj - 1.0)), 100, on_change_max)
-    cv.createTrackbar('gamma', 'adjust', int(100 * gamma), 100, on_change_gamma)
-    cv.createTrackbar('gamma weight', 'adjust', int(100 * gamma_weight), 100, on_change_gamma_weight)
-    cv.createTrackbar('dark clip', 'adjust', int(1000 * min_clip), 100, on_change_clip)
-    cv.createTrackbar('crop radius', 'adjust', int(50 * (crop_radius - 1.0)), 100, on_change_radius)
-    cv.createTrackbar('quadrant', 'adjust', 0, 4, on_change_quadrant)
-    cv.createTrackbar('rotation', 'adjust', int(10 * rotation), 3600, on_change_rotation)
-    cv.waitKey(0)
-    return min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, rotation
+    layout = [[sg.Text('Click when finished adjusting: '), sg.Text('Done', enable_events=True, key='Exit', relief="raised", border_width=5, expand_x=True, justification='center'),
+               sg.Checkbox('Show Colorized', True, enable_events=True, key='-COLORIZE-')],
+       [sg.Text('MinAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=1.2, expand_x=True, enable_events=True, orientation='h', key='-MINADJUST-')],
+       [sg.Text('MaxAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=1.8, expand_x=True, enable_events=True, orientation='h', key='-MAXADJUST-')],
+       [sg.Text('Gamma', size=(12, 1)), sg.Slider(range=(0.1, 3.0), resolution=0.025, default_value=1.0, expand_x=True, enable_events=True, orientation='h', key='-GAMMA-')],
+       [sg.Text('GammaWeight', size=(12, 1)), sg.Slider(range=(0.0, 1.0), resolution=0.05, default_value=0.5, expand_x=True, enable_events=True, orientation='h', key='-GAMMAWEIGHT-')],
+       [sg.Text('DarkClip', size=(12, 1)), sg.Slider(range=(0.0, 0.5), resolution=0.001, default_value=0.015, expand_x=True, enable_events=True, orientation='h', key='-DARKCLIP-')],
+       [sg.Text('CropRadius', size=(12, 1)), sg.Slider(range=(1.0, 2.5), resolution=0.05, default_value=1.2, expand_x=True, enable_events=True, orientation='h', key='-CROPRADIUS-')],
+       [sg.Text('Rotation', size=(12, 1)), sg.Slider(range=(0.0, 360.0), resolution=0.1, default_value=0.0, expand_x=True, enable_events=True, orientation='h', key='-ROTATION-')],
+       [sg.Text('Quadrant', size=(12, 1)), sg.Slider(range=(0, 4), resolution=1, default_value=0, expand_x=True, enable_events=True, orientation='h', key='-QUADRANT-')]]
+    window = sg.Window('SolarFinish', layout)
+    callbacks = { '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
+                  '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip, '-CROPRADIUS-': on_change_radius,
+                  '-QUADRANT-': on_change_quadrant, '-ROTATION-': on_change_rotation, '-COLORIZE-': on_change_colorize}
+    while True:
+       event, values = window.read()
+       if event == sg.WIN_CLOSED or event == 'Exit':
+          break
+       elif event in callbacks:
+          callbacks[event](values[event])
+    window.close()
 
+    return min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, rotation
 
 #
 # main - drive the high-level flow
@@ -1018,15 +1036,16 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
 
     # brighten and colorize
     enhanced = brighten(enhanced, brighten_gamma, gamma_weight)
-    print("Displaying grayscale enhanced result:", flush=True)
-    show_float01(enhanced)
-    download_button(float01_to_16bit(enhanced), fn, "enhancedgraybright")
-
     enhance8 = colorize8_rgb(enhanced, 0.5, 1.25, 3.75)
     enhance16 = colorize16_bgr(enhanced, 0.5, 1.25, 3.75)
-    print("Displaying colorized enhanced result:", flush=True)
-    show_rgb(enhance8)
-    download_button(enhance16, fn, "enhancedcolor")
+    if not interact:
+        print("Displaying grayscale enhanced result:", flush=True)
+        show_float01(enhanced)
+        download_button(float01_to_16bit(enhanced), fn, "enhancedgraybright")
+
+        print("Displaying colorized enhanced result:", flush=True)
+        show_rgb(enhance8)
+        download_button(enhance16, fn, "enhancedcolor")
     return enhance16
 
 
@@ -1175,7 +1194,6 @@ continue to evolve, and don't expect much tech support.
             out_fn = output_directory + '/' + os.path.basename(out_fn)  # replace input dir without output dir
             write_image(enhance16, out_fn, "enhancedcolor" + suffix)
             write_image(cv.cvtColor(enhance16, cv.COLOR_BGR2GRAY), out_fn, "enhancedgray" + suffix)
-            cv.waitKey(0)
             cv.destroyAllWindows()
 
 
