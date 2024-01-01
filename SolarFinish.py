@@ -896,13 +896,13 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
     update()
     layout = [[sg.Text('Click when finished adjusting: '), sg.Text('Done', enable_events=True, key='Exit', relief="raised", border_width=5, expand_x=True, justification='center'),
                sg.Checkbox('Show Colorized', True, enable_events=True, key='-COLORIZE-')],
-       [sg.Text('MinAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=1.2, expand_x=True, enable_events=True, orientation='h', key='-MINADJUST-')],
-       [sg.Text('MaxAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=1.8, expand_x=True, enable_events=True, orientation='h', key='-MAXADJUST-')],
-       [sg.Text('Gamma', size=(12, 1)), sg.Slider(range=(0.1, 3.0), resolution=0.025, default_value=1.0, expand_x=True, enable_events=True, orientation='h', key='-GAMMA-')],
-       [sg.Text('GammaWeight', size=(12, 1)), sg.Slider(range=(0.0, 1.0), resolution=0.05, default_value=0.5, expand_x=True, enable_events=True, orientation='h', key='-GAMMAWEIGHT-')],
-       [sg.Text('DarkClip', size=(12, 1)), sg.Slider(range=(0.0, 0.5), resolution=0.001, default_value=0.015, expand_x=True, enable_events=True, orientation='h', key='-DARKCLIP-')],
-       [sg.Text('CropRadius', size=(12, 1)), sg.Slider(range=(1.0, 2.5), resolution=0.05, default_value=1.2, expand_x=True, enable_events=True, orientation='h', key='-CROPRADIUS-')],
-       [sg.Text('Rotation', size=(12, 1)), sg.Slider(range=(0.0, 360.0), resolution=0.1, default_value=0.0, expand_x=True, enable_events=True, orientation='h', key='-ROTATION-')],
+       [sg.Text('MinAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=min_adj, expand_x=True, enable_events=True, orientation='h', key='-MINADJUST-')],
+       [sg.Text('MaxAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=max_adj, expand_x=True, enable_events=True, orientation='h', key='-MAXADJUST-')],
+       [sg.Text('Gamma', size=(12, 1)), sg.Slider(range=(0.1, 3.0), resolution=0.025, default_value=gamma, expand_x=True, enable_events=True, orientation='h', key='-GAMMA-')],
+       [sg.Text('GammaWeight', size=(12, 1)), sg.Slider(range=(0.0, 1.0), resolution=0.05, default_value=gamma_weight, expand_x=True, enable_events=True, orientation='h', key='-GAMMAWEIGHT-')],
+       [sg.Text('DarkClip', size=(12, 1)), sg.Slider(range=(0.0, 0.5), resolution=0.001, default_value=min_clip, expand_x=True, enable_events=True, orientation='h', key='-DARKCLIP-')],
+       [sg.Text('CropRadius', size=(12, 1)), sg.Slider(range=(1.0, 2.5), resolution=0.05, default_value=crop_radius, expand_x=True, enable_events=True, orientation='h', key='-CROPRADIUS-')],
+       [sg.Text('Rotation', size=(12, 1)), sg.Slider(range=(0.0, 360.0), resolution=0.1, default_value=rotation, expand_x=True, enable_events=True, orientation='h', key='-ROTATION-')],
        [sg.Text('Quadrant', size=(12, 1)), sg.Slider(range=(0, 4), resolution=1, default_value=0, expand_x=True, enable_events=True, orientation='h', key='-QUADRANT-')]]
     window = sg.Window('SolarFinish', layout)
     callbacks = { '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
