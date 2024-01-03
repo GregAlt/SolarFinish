@@ -278,6 +278,11 @@ def shrink(im, div):
     return cv.resize(im, np.floor_divide((im.shape[1], im.shape[0]), div))
 
 
+# scale image by percent
+def zoom_image(im, zoom):
+    return cv.resize(im, np.floor_divide((int(im.shape[1]*zoom), int(im.shape[0]*zoom)), 100))
+
+
 # Return an image with circle drawn on it for visualizing circle finding
 def add_circle(im, center, radius, color, thickness):
     cv.ellipse(im, center, (radius, radius), 0, 0, 360, color, thickness, cv.LINE_AA)
@@ -836,11 +841,6 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
         gamma_weight = val
         update_post_enhance()
 
-    def on_change_quadrant(val):
-        nonlocal quadrant
-        quadrant = int(val)
-        update()
-
     def on_change_radius(val):
         nonlocal crop_radius
         crop_radius = val
@@ -860,28 +860,47 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
         nonlocal show_colorized
         show_colorized = val
         update_post_enhance()
+    def on_change_zoom(val):
+        nonlocal zoom
+        zoom = val
+        update()
+
+    def on_change_window_size(val):
+        nonlocal window_size
+        window_size = val
+        update_post_enhance()
+
+    def on_change_horiz_pan(val):
+        nonlocal horiz_pan
+        horiz_pan = val
+        update_post_enhance()
+
+    def on_change_vert_pan(val):
+        nonlocal vert_pan
+        vert_pan = val
+        update_post_enhance()
 
     # this is the expensive part
     def update_enhance():
         (new_center, new_img) = crop_to_dist(img, center, radius * crop_radius)
-        im = shrink(new_img, 3) if quadrant == 0 else new_img
         nonlocal enhanced
-        enhanced = cnrgf_enhance(im, 6, min_adj, max_adj, min_clip, None, None, "")
+        enhanced = cnrgf_enhance(new_img, 6, min_adj, max_adj, min_clip, None, None, "")
+
+    def crop_to_zoomed_view(im, zoom, size):
+        z = zoom_image(im, zoom)
+        crop_size = int(min(z.shape[0], size))
+        start_row = np.clip(int(z.shape[0] * vert_pan - crop_size // 2), 0, z.shape[0]-crop_size)
+        start_col = np.clip(int(z.shape[1] * horiz_pan - crop_size // 2), 0, z.shape[1]-crop_size)
+        return z[start_row:start_row+crop_size, start_col:start_col+crop_size]
 
     # this is the cheap part to update
     def update_post_enhance():
         nonlocal enhanced
         enhanced_rot = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation - init_rotation)
-        if quadrant == 0:
-            im = enhanced_rot
-        else:
-            h = enhanced_rot.shape[0]
-            r = (quadrant - 1) // 2
-            c = (quadrant - 1) % 2
-            im = enhanced_rot[r * (h // 2):r * (h // 2) + h // 2, c * (h // 2):c * (h // 2) + h // 2]
-        brightened = brighten(im, gamma, gamma_weight)
+        brightened = brighten(enhanced_rot, gamma, gamma_weight)
         enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75)) if show_colorized else swap_rb(colorize8_rgb(brightened, 1, 1, 1))
-        cv.imshow('adjust', enhance8)
+        zoomed_view = crop_to_zoomed_view(enhance8, zoom, window_size)
+        cv.imshow('adjust', zoomed_view)
 
     # split updating the image into cheap and expensive parts, to allow faster refresh
     def update():
@@ -890,9 +909,12 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
 
     rotation %= 360.0
     init_rotation = rotation
-    quadrant = 0
     enhanced = np.zeros(0)
     show_colorized = True
+    zoom = 33
+    window_size = 500
+    horiz_pan = 0.5
+    vert_pan = 0.5
     update()
     layout = [[sg.Text('Click when finished adjusting: '), sg.Text('Done', enable_events=True, key='Exit', relief="raised", border_width=5, expand_x=True, justification='center'),
                sg.Checkbox('Show Colorized', True, enable_events=True, key='-COLORIZE-')],
@@ -903,11 +925,16 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
        [sg.Text('DarkClip', size=(12, 1)), sg.Slider(range=(0.0, 0.5), resolution=0.001, default_value=min_clip, expand_x=True, enable_events=True, orientation='h', key='-DARKCLIP-')],
        [sg.Text('CropRadius', size=(12, 1)), sg.Slider(range=(1.0, 2.5), resolution=0.05, default_value=crop_radius, expand_x=True, enable_events=True, orientation='h', key='-CROPRADIUS-')],
        [sg.Text('Rotation', size=(12, 1)), sg.Slider(range=(0.0, 360.0), resolution=0.1, default_value=rotation, expand_x=True, enable_events=True, orientation='h', key='-ROTATION-')],
-       [sg.Text('Quadrant', size=(12, 1)), sg.Slider(range=(0, 4), resolution=1, default_value=0, expand_x=True, enable_events=True, orientation='h', key='-QUADRANT-')]]
+       [sg.HorizontalSeparator()],
+       [sg.Text('Zoom', size=(12, 1)), sg.Slider(range=(10, 100), resolution=1, default_value=zoom, expand_x=True, enable_events=True, orientation='h', key='-ZOOM-')],
+       [sg.Text('Window Size', size=(12, 1)), sg.Slider(range=(200, 2000), resolution=1, default_value=window_size, expand_x=True, enable_events=True, orientation='h', key='-WINSIZE-')],
+       [sg.Text('Horiz Pan', size=(12, 1)), sg.Slider(range=(0.0, 1.0), resolution=0.005, default_value=horiz_pan, expand_x=True, enable_events=True, orientation='h', key='-HPAN-')],
+       [sg.Text('Vert Pan', size=(12, 1)), sg.Slider(range=(0.0, 1.0), resolution=0.005, default_value=vert_pan, expand_x=True, enable_events=True, orientation='h', key='-VPAN-')]]
     window = sg.Window('SolarFinish', layout)
     callbacks = { '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
                   '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip, '-CROPRADIUS-': on_change_radius,
-                  '-QUADRANT-': on_change_quadrant, '-ROTATION-': on_change_rotation, '-COLORIZE-': on_change_colorize}
+                  '-ROTATION-': on_change_rotation, '-COLORIZE-': on_change_colorize, '-ZOOM-': on_change_zoom,
+                  '-WINSIZE-': on_change_window_size, '-HPAN-': on_change_horiz_pan, '-VPAN-':on_change_vert_pan }
     while True:
        event, values = window.read()
        if event == sg.WIN_CLOSED or event == 'Exit':
