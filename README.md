@@ -30,8 +30,12 @@ When running in interactive mode with the --interact or -i command line argument
 -  **Gamma Weight** shifts the gamma curve. 1 means a simple gamma curve where the bulk of the brightening is on darker pixels -- this can be a problem because it emphasizes background glow and noise beyond the solar limb. 0 means shift emphasis to brighter pixels, generally in solar disk. In the middle blends between the two. It helps to use Quadrant to zoom in on prominences when adjusting this to see the subtle effect.
 -  **Dark Clip** controls the level at which pixels are clipped to black. This should stay very low, as raising too high will eat away at the faint fringes of prominences. Too low, though, and you might see too much background glow and noise.
 -  **Crop Radius** controls the size of the final image crop
--  **Quadrant** lets you zoom into different quadrants to better see effects at a pixel level. This doesn't have any effect on the generated image.
 -  **Rotation** controls the rotation of the image, to let you manually align
+
+And view controls that have no effect on the generated image:
+-  **Zoom** lets you zoom out to see full disk even for large image sizes
+-  **Window Size** lets you control the window size to better fit on screen
+-  **Horiz/Vert Pan** shifts the solar disk within the window if current zoom is too big to fit within window size
 
 More details:
 ```
