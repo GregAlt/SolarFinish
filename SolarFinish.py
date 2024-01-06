@@ -1108,8 +1108,10 @@ def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_
             return None
         (min_recip, max_recip, brighten_gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation) = params
         print("\nCommand line equivalent to adjusted parameters:")
+        hv = ("h" if h_flip else "")+("v" if v_flip else "")
+        flip = " --flip " + hv if h_flip or v_flip else ""
         print(
-            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius} --rotate {rotation} --darkclip {min_clip}\n", flush=True)
+            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius}{flip} --rotate {rotation} --darkclip {min_clip}\n", flush=True)
 
     if silent:
         enhance16 = silent_process_image(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
