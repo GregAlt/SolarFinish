@@ -1,5 +1,6 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
 
+# Version 0.12 - Added flip checkboxes to interactive, switched to pysimplegui
 # Version 0.11 - Added more command line args, for all parameters. Also expanded
 #                interactive mode with more sliders.
 # Version 0.10 - Fixed some bugs in command line args
@@ -819,8 +820,7 @@ def cnrgf_enhance(img, n, min_recip, max_recip, min_clip, show_intermediate_1, s
 # Interactive
 
 # Drive interactive adjustment and visualization of parameters with sliders, return final params selected
-def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius,
-                       rotation):
+def interactive_adjust(src,  min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation):
     def on_change_min(val):
         nonlocal min_adj
         min_adj = val
@@ -880,6 +880,18 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
         vert_pan = val
         update_post_enhance()
 
+    def on_change_horiz_flip(val):
+        nonlocal h_flip, img
+        img = flip_image(img, h_flip != val, False)
+        h_flip = val
+        update()
+
+    def on_change_vert_flip(val):
+        nonlocal v_flip, img
+        img = flip_image(img, False, v_flip != val)
+        v_flip = val
+        update()
+
     # this is the expensive part
     def update_enhance():
         (new_center, new_img) = crop_to_dist(img, center, radius * crop_radius)
@@ -896,7 +908,7 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
     # this is the cheap part to update
     def update_post_enhance():
         nonlocal enhanced
-        enhanced_rot = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation - init_rotation)
+        enhanced_rot = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation)
         brightened = brighten(enhanced_rot, gamma, gamma_weight)
         enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75)) if show_colorized else swap_rb(colorize8_rgb(brightened, 1, 1, 1))
         zoomed_view = crop_to_zoomed_view(enhance8, zoom, window_size)
@@ -907,8 +919,17 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
         update_enhance()
         update_post_enhance()
 
+    # find the solar disk circle
+    (is_valid, src_center, radius) = find_valid_circle(src)
+    if not is_valid:
+        print("Error: Couldn't find valid circle for input solar disk!", flush=True)
+        return None
+
+    # use an expanded/centered grayscale 0-1 float image for all calculations
+    center, centered = center_and_expand(src_center, src)
+    img = flip_image(to_float01_from_16bit(centered), h_flip, v_flip)
+
     rotation %= 360.0
-    init_rotation = rotation
     enhanced = np.zeros(0)
     show_colorized = True
     zoom = 33
@@ -925,6 +946,8 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
        [sg.Text('DarkClip', size=(12, 1)), sg.Slider(range=(0.0, 0.5), resolution=0.001, default_value=min_clip, expand_x=True, enable_events=True, orientation='h', key='-DARKCLIP-')],
        [sg.Text('CropRadius', size=(12, 1)), sg.Slider(range=(1.0, 2.5), resolution=0.05, default_value=crop_radius, expand_x=True, enable_events=True, orientation='h', key='-CROPRADIUS-')],
        [sg.Text('Rotation', size=(12, 1)), sg.Slider(range=(0.0, 360.0), resolution=0.1, default_value=rotation, expand_x=True, enable_events=True, orientation='h', key='-ROTATION-')],
+       [sg.Checkbox('Horizontal Flip', default=h_flip, enable_events=True, key='-HFLIP-')],
+       [sg.Checkbox('Vertical Flip', default=v_flip, enable_events=True, key='-VFLIP-')],
        [sg.HorizontalSeparator()],
        [sg.Text('Zoom', size=(12, 1)), sg.Slider(range=(10, 100), resolution=1, default_value=zoom, expand_x=True, enable_events=True, orientation='h', key='-ZOOM-')],
        [sg.Text('Window Size', size=(12, 1)), sg.Slider(range=(200, 2000), resolution=1, default_value=window_size, expand_x=True, enable_events=True, orientation='h', key='-WINSIZE-')],
@@ -934,7 +957,8 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
     callbacks = { '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
                   '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip, '-CROPRADIUS-': on_change_radius,
                   '-ROTATION-': on_change_rotation, '-COLORIZE-': on_change_colorize, '-ZOOM-': on_change_zoom,
-                  '-WINSIZE-': on_change_window_size, '-HPAN-': on_change_horiz_pan, '-VPAN-':on_change_vert_pan }
+                  '-WINSIZE-': on_change_window_size, '-HPAN-': on_change_horiz_pan, '-VPAN-':on_change_vert_pan,
+                  '-HFLIP-': on_change_horiz_flip, '-VFLIP-': on_change_vert_flip}
     while True:
        event, values = window.read()
        if event == sg.WIN_CLOSED or event == 'Exit':
@@ -943,7 +967,7 @@ def interactive_adjust(img, center, radius, _dist_to_edge, min_adj, max_adj, gam
           callbacks[event](values[event])
     window.close()
 
-    return min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, rotation
+    return min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation
 
 #
 # main - drive the high-level flow
@@ -994,14 +1018,15 @@ def align_image(im, date, silent):
         print(f"\nAlignment result: angle is {angle}{' and horizontally flipped' if flipped else ''}. Equivalent to command line args:", flush=True)
         print(f"     --rotate {angle} {'--flip h' if flipped else ''}", flush=True)
 
-    if flipped:
-        im = cv.flip(im, 1)
-    im = sp.ndimage.rotate(im, angle)
-    return im
+    return flipped, angle
 
 
 # Process a single image, silently
-def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip):
+def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip, rotation):
+    src = flip_image(src, h_flip, v_flip)
+    if rotation != 0.0:
+        src = sp.ndimage.rotate(src, rotation)
+
     (is_valid, src_center, radius) = find_valid_circle(src)
     if not is_valid:
         return None
@@ -1021,7 +1046,11 @@ def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight
 
 
 # Process a single image, with verbose output. Includes interactive adjustment if interact=True
-def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, rotation, interact, fn):
+def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip, rotation, interact, fn):
+    src = flip_image(src, h_flip, v_flip)
+    if rotation != 0.0:
+        src = sp.ndimage.rotate(src, rotation)
+
     # find the solar disk circle
     (is_valid, src_center, radius) = find_valid_circle(src)
     if not is_valid:
@@ -1044,20 +1073,7 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
         f"Circle found with radius {radius} and center {src_center[0]},{src_center[1]}. Pixel size is about {solar_radius_in_km / radius:.1f}km. Displaying sun with circle found--should be very close to the edge of the photosphere.", flush=True)
     show_rgb(image_with_circle)
 
-    init_rotation = rotation
-    if not IN_COLAB and interact:
-        dist_to_edge = calc_min_dist_to_edge(src_center, src.shape)
-        params = interactive_adjust(img, center, radius, dist_to_edge, min_recip, max_recip, brighten_gamma,
-                                    gamma_weight,
-                                    min_clip, crop_radius, rotation)
-        (min_recip, max_recip, brighten_gamma, gamma_weight, min_clip, crop_radius, rotation) = params
-        print("\nCommand line equivalent to adjusted parameters:")
-        print(
-            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius} --rotate {rotation} --darkclip {min_clip}\n", flush=True)
-
     enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, fn)
-    if init_rotation != rotation:
-        enhanced = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation - init_rotation)
     dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
     (center, enhanced) = crop_to_dist(enhanced, center, dist)
 
@@ -1080,19 +1096,27 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
 def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_contrast_adjust, max_contrast_adjust,
                brighten_gamma, gamma_weight, crop_radius, dark_clip, rotation, interact):
     src, filename = fetch_image(filename_or_url)
-    src = flip_image(src, h_flip, v_flip)
 
     if should_align:
-        src = align_image(src, date, silent)
-    elif rotation != 0.0:
-        src = sp.ndimage.rotate(src, rotation)
+        v_flip = False
+        h_flip, rotation = align_image(src, date, silent)
+
+    if not IN_COLAB and interact:
+        params = interactive_adjust(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
+                                    gamma_weight, dark_clip, crop_radius, h_flip, v_flip, rotation)
+        if params is None:
+            return None
+        (min_recip, max_recip, brighten_gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation) = params
+        print("\nCommand line equivalent to adjusted parameters:")
+        print(
+            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius} --rotate {rotation} --darkclip {min_clip}\n", flush=True)
 
     if silent:
         enhance16 = silent_process_image(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                                         crop_radius, dark_clip)
+                                         crop_radius, dark_clip, h_flip, v_flip, rotation)
     else:
         enhance16 = process_image(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                                  crop_radius, dark_clip, rotation, interact, filename)
+                                  crop_radius, dark_clip, h_flip, v_flip, rotation, interact, filename)
 
     return enhance16, filename
 
@@ -1214,10 +1238,11 @@ continue to evolve, and don't expect much tech support.
 
     for fn in fn_list:
         full_name = fn if is_url(fn) else directory + '/' + fn
-        enhance16, out_fn = image_main(full_name, silent, h_flip, v_flip, should_align_first, date_if_aligning,
+        result = image_main(full_name, silent, h_flip, v_flip, should_align_first, date_if_aligning,
                                        min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
                                        crop_radius, dark_clip, rotation, interact)
-        if not IN_COLAB:
+        if result is not None and not IN_COLAB:
+            enhance16, out_fn = result
             out_fn = output_directory + '/' + os.path.basename(out_fn)  # replace input dir without output dir
             write_image(enhance16, out_fn, "enhancedcolor" + suffix)
             write_image(cv.cvtColor(enhance16, cv.COLOR_BGR2GRAY), out_fn, "enhancedgray" + suffix)
