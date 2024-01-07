@@ -891,25 +891,11 @@ def interactive_adjust(src,  min_adj, max_adj, gamma, gamma_weight, min_clip, cr
         nonlocal show_colorized
         show_colorized = val
         update_post_enhance()
+
     def on_change_zoom(val):
         nonlocal zoom
         zoom = val
         update()
-
-    def on_change_window_size(val):
-        nonlocal window_size
-        window_size = val
-        update_post_enhance()
-
-    def on_change_horiz_pan(val):
-        nonlocal horiz_pan
-        horiz_pan = val
-        update_post_enhance()
-
-    def on_change_vert_pan(val):
-        nonlocal vert_pan
-        vert_pan = val
-        update_post_enhance()
 
     def on_change_horiz_flip(val):
         nonlocal h_flip, img
@@ -929,12 +915,14 @@ def interactive_adjust(src,  min_adj, max_adj, gamma, gamma_weight, min_clip, cr
         nonlocal enhanced
         enhanced = cnrgf_enhance(new_img, 6, min_adj, max_adj, min_clip, None, None, "")
 
-    def crop_to_zoomed_view(im, zoom, size):
-        z = zoom_image(im, zoom)
-        crop_size = int(min(z.shape[0], size))
-        start_row = np.clip(int(z.shape[0] * vert_pan - crop_size // 2), 0, z.shape[0]-crop_size)
-        start_col = np.clip(int(z.shape[1] * horiz_pan - crop_size // 2), 0, z.shape[1]-crop_size)
-        return z[start_row:start_row+crop_size, start_col:start_col+crop_size]
+    def make_image_window(win_size, controls):
+        image_col = sg.Column([[sg.Image(key='-IMAGE-')]], size=win_size, expand_x=True, expand_y=True, scrollable=True, key='-SCROLLABLE-')
+        return sg.Window('SolarFinish', [[image_col, sg.Column(controls)]], resizable=True, finalize=True)
+
+    def update_image(win, im):
+        win['-IMAGE-'].update(size=(im.shape[1], im.shape[0]), data=cv.imencode('.png', im)[1].tobytes())
+        win.refresh()
+        win['-SCROLLABLE-'].contents_changed()
 
     # this is the cheap part to update
     def update_post_enhance():
@@ -942,8 +930,8 @@ def interactive_adjust(src,  min_adj, max_adj, gamma, gamma_weight, min_clip, cr
         enhanced_rot = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation)
         brightened = brighten(enhanced_rot, gamma, gamma_weight)
         enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75)) if show_colorized else swap_rb(colorize8_rgb(brightened, 1, 1, 1))
-        zoomed_view = crop_to_zoomed_view(enhance8, zoom, window_size)
-        cv.imshow('adjust', zoomed_view)
+        nonlocal window
+        update_image(window, zoom_image(enhance8, zoom))
 
     # split updating the image into cheap and expensive parts, to allow faster refresh
     def update():
@@ -964,10 +952,6 @@ def interactive_adjust(src,  min_adj, max_adj, gamma, gamma_weight, min_clip, cr
     enhanced = np.zeros(0)
     show_colorized = True
     zoom = 33
-    window_size = 500
-    horiz_pan = 0.5
-    vert_pan = 0.5
-    update()
     layout = [[sg.Text('Click when finished adjusting: '), sg.Text('Done', enable_events=True, key='Exit', relief="raised", border_width=5, expand_x=True, justification='center'),
                sg.Checkbox('Show Colorized', True, enable_events=True, key='-COLORIZE-')],
        [sg.Text('MinAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=min_adj, expand_x=True, enable_events=True, orientation='h', key='-MINADJUST-')],
@@ -980,15 +964,12 @@ def interactive_adjust(src,  min_adj, max_adj, gamma, gamma_weight, min_clip, cr
        [sg.Checkbox('Horizontal Flip', default=h_flip, enable_events=True, key='-HFLIP-')],
        [sg.Checkbox('Vertical Flip', default=v_flip, enable_events=True, key='-VFLIP-')],
        [sg.HorizontalSeparator()],
-       [sg.Text('Zoom', size=(12, 1)), sg.Slider(range=(10, 100), resolution=1, default_value=zoom, expand_x=True, enable_events=True, orientation='h', key='-ZOOM-')],
-       [sg.Text('Window Size', size=(12, 1)), sg.Slider(range=(200, 2000), resolution=1, default_value=window_size, expand_x=True, enable_events=True, orientation='h', key='-WINSIZE-')],
-       [sg.Text('Horiz Pan', size=(12, 1)), sg.Slider(range=(0.0, 1.0), resolution=0.005, default_value=horiz_pan, expand_x=True, enable_events=True, orientation='h', key='-HPAN-')],
-       [sg.Text('Vert Pan', size=(12, 1)), sg.Slider(range=(0.0, 1.0), resolution=0.005, default_value=vert_pan, expand_x=True, enable_events=True, orientation='h', key='-VPAN-')]]
-    window = sg.Window('SolarFinish', layout)
+       [sg.Text('Zoom', size=(12, 1)), sg.Slider(range=(10, 100), resolution=1, default_value=zoom, expand_x=True, enable_events=True, orientation='h', key='-ZOOM-')]]
+    window = make_image_window((500, 500), layout)
+    update()
     callbacks = { '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
                   '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip, '-CROPRADIUS-': on_change_radius,
                   '-ROTATION-': on_change_rotation, '-COLORIZE-': on_change_colorize, '-ZOOM-': on_change_zoom,
-                  '-WINSIZE-': on_change_window_size, '-HPAN-': on_change_horiz_pan, '-VPAN-':on_change_vert_pan,
                   '-HFLIP-': on_change_horiz_flip, '-VFLIP-': on_change_vert_flip}
     while True:
        event, values = window.read()
