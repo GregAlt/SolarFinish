@@ -191,6 +191,27 @@ def rotate(im, center, angle_deg):
     return cv.warpAffine(im, m, (cols, rows))
 
 
+# rotation with expanding the result, and fill the padded triangles from the border
+def rotate_with_expand_fill(im, angle_deg):
+    # do a test rotate to get new dimensions
+    test_shape = sp.ndimage.rotate(im, angle_deg).shape
+    ty, tx = test_shape[0:2]
+
+    # expand unrotated image using border fill
+    temp_center = (im.shape[1] // 2, im.shape[0] // 2)
+    expand_dist = center_and_expand_get_dist((tx//2, ty//2), test_shape)
+    temp_center, im2 = center_and_expand_to_dist(temp_center, im, expand_dist)
+
+    # rotate the expanded image
+    src = sp.ndimage.rotate(im2, angle_deg)
+
+    # and then crop back to the original test rotate image dimensions
+    sy, sx = im2.shape[0:2]
+    start_y, start_x = sy // 2 - ty // 2, sx // 2 - tx // 2
+    im2 = src[start_y: start_y + ty, start_x: start_x + tx]
+    return im2[start_y: start_y + ty, start_x: start_x + tx]
+
+
 # Turns a centered solar disk image from a disk to a rectangle,
 # with rows being angle and columns being distance from center
 def polar_warp(img):
@@ -290,6 +311,27 @@ def add_circle(im, center, radius, color, thickness):
     return im
 
 
+# expand given a distance
+def center_and_expand_to_dist(center, src, max_dist):
+    to_left, to_right = (center[0], src.shape[1] - center[0])
+    to_top, to_bottom = (center[1], src.shape[0] - center[1])
+    new_center = (max_dist, max_dist)
+    out_img = np.pad(src, ((max_dist - to_top, max_dist - to_bottom), (max_dist - to_left, max_dist - to_right)),
+                     mode='edge')
+    return new_center, out_img
+
+
+# calculate the distance needed for expanding
+def center_and_expand_get_dist(center, shape):
+    to_left, to_right = (center[0], shape[1] - center[0])
+    to_top, to_bottom = (center[1], shape[0] - center[1])
+    to_ul = math.sqrt(to_top * to_top + to_left * to_left)
+    to_ur = math.sqrt(to_top * to_top + to_right * to_right)
+    to_bl = math.sqrt(to_bottom * to_bottom + to_left * to_left)
+    to_br = math.sqrt(to_bottom * to_bottom + to_right * to_right)
+    return int(max(to_ul, to_ur, to_bl, to_br)) + 1
+
+
 # Create an expanded image centered on the sun. Ensure that a bounding circle
 # centered on the sun and enclosing the original image's four corners is fully
 # enclosed in the resulting image. For added pixels, pad by copying the existing
@@ -298,18 +340,7 @@ def add_circle(im, center, radius, color, thickness):
 # in turn, means that circular banding artifacts will occur farther out and can be
 # fully cropped out at the end.
 def center_and_expand(center, src):
-    to_left, to_right = (center[0], src.shape[1] - center[0])
-    to_top, to_bottom = (center[1], src.shape[0] - center[1])
-    to_ul = math.sqrt(to_top * to_top + to_left * to_left)
-    to_ur = math.sqrt(to_top * to_top + to_right * to_right)
-    to_bl = math.sqrt(to_bottom * to_bottom + to_left * to_left)
-    to_br = math.sqrt(to_bottom * to_bottom + to_right * to_right)
-    max_dist = int(max(to_ul, to_ur, to_bl, to_br)) + 1
-    new_center = (max_dist, max_dist)
-    out_img = np.pad(src, ((max_dist - to_top, max_dist - to_bottom), (max_dist - to_left, max_dist - to_right)),
-                     mode='edge')
-    return new_center, out_img
-
+    return center_and_expand_to_dist(center, src, center_and_expand_get_dist(center, src.shape))
 
 # Crop image to a square with given min distance from center. Return new image and center.
 # If specified min_dist is too large clamp it, because this function can only crop
@@ -1025,7 +1056,7 @@ def align_image(im, date, silent):
 def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip, rotation):
     src = flip_image(src, h_flip, v_flip)
     if rotation != 0.0:
-        src = sp.ndimage.rotate(src, rotation)
+        src = rotate_with_expand_fill(src, rotation)
 
     (is_valid, src_center, radius) = find_valid_circle(src)
     if not is_valid:
@@ -1049,7 +1080,7 @@ def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight
 def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip, rotation, interact, fn):
     src = flip_image(src, h_flip, v_flip)
     if rotation != 0.0:
-        src = sp.ndimage.rotate(src, rotation)
+        src = rotate_with_expand_fill(src, rotation)
 
     # find the solar disk circle
     (is_valid, src_center, radius) = find_valid_circle(src)
