@@ -209,7 +209,7 @@ def rotate_with_expand_fill(im, angle_deg):
     sy, sx = im2.shape[0:2]
     start_y, start_x = sy // 2 - ty // 2, sx // 2 - tx // 2
     im2 = src[start_y: start_y + ty, start_x: start_x + tx]
-    return im2[start_y: start_y + ty, start_x: start_x + tx]
+    return im2
 
 
 # Turns a centered solar disk image from a disk to a rectangle,
