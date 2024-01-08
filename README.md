@@ -23,6 +23,14 @@ or
 ```
    SolarFinish.exe --interact https://www.cloudynights.com/uploads/gallery/album_24370/gallery_79290_24370_2225872.png
 ```
+
+As an example, if you run this and cancel the file open dialog to use the sample image:
+```
+   SolarFinish.exe --brighten 0.6 --brightenweight 0.0 --enhance 1.2,2.5 --crop 1.15 --rotate 0.6328125 --darkclip 0.015 --silent
+```
+Here's the result:
+![result output image](examples/2023-09-09-Lunt50DS-enhancedcolor.png)
+
 ## Interactive Mode
 When running in interactive mode with the --interact or -i command line arguments, you're presented with sliders that change the different parameters, showing the result in realtime. When you are finished, and hit a key in the window, it exits, writing out the result grayscale and colorized images, and displaying the command line parameters corresponding to your parameter choices. The GUI is crude, but functional. Here's an explanation for the sliders:
 - **Min/Max Adjust**: these control how much contrast enhancement is applied. Min controls how much contrast is exaggerated in areas that already have high contrast, and Max controls contrast enhancement in areas that begin with low contrast. Min should be less than max, and the smaller the value, the less enhancement.
