@@ -34,8 +34,6 @@ When running in interactive mode with the --interact or -i command line argument
 
 And view controls that have no effect on the generated image:
 -  **Zoom** lets you zoom out to see full disk even for large image sizes
--  **Window Size** lets you control the window size to better fit on screen
--  **Horiz/Vert Pan** shifts the solar disk within the window if current zoom is too big to fit within window size
 
 More details:
 ```
