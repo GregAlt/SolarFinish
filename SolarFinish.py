@@ -1,4 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
+__version__ = "0.13.0"
 
 # Version 0.12 - Added flip checkboxes to interactive, switched to pysimplegui
 # Version 0.11 - Added more command line args, for all parameters. Also expanded
@@ -1144,6 +1145,7 @@ def popup_get_file(save_as, folder, default):
 def process_args():
     fn_list = []
     parser = argparse.ArgumentParser(description='Process solar images')
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + __version__)
     parser.add_argument('-t', '--type', type=str, default='tif', help='filetype to go along with -d, defaults to tif')
     parser.add_argument('-p', '--pattern', type=str, default='', help='String pattern to match for -d')
     parser.add_argument('-o', '--output', type=str, nargs='?', help='Output directory')
