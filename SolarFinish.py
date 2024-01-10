@@ -153,11 +153,11 @@ def colorize8_rgb(im, r, g, b):
     return float01_to_8bit(cv.merge(rgb))
 
 
-# Given arbitrary image file, whether grayscale or RGB, 8 bit or 16 bit,
+# Given arbitrary image file, whether grayscale or RGB, 8 bit or 16 bit, or even 32 bit float
 # return as 0-65535 16 bit single-channel grayscale
 def force16_gray(im):
     im = rgb2gray(im) if len(im.shape) > 2 else im
-    return cv.normalize(im.astype(np.uint16), None, 0, 65535, cv.NORM_MINMAX)
+    return cv.normalize(im.astype(np.float32), None, 0, 65535, cv.NORM_MINMAX).astype(np.uint16)
 
 
 # Given a single-channel grayscale 16 bit image, return a three-channel 0-255 8 bit grayscale image
