@@ -1,5 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.13.0"
+__version__ = "0.13.1"
 
 # Version 0.12 - Added flip checkboxes to interactive, switched to pysimplegui
 # Version 0.11 - Added more command line args, for all parameters. Also expanded
@@ -43,6 +43,7 @@ except ImportError:
     import argparse
     import os
     import re
+    import PySimpleGUI as sg
 
 import math
 import numpy as np
@@ -54,7 +55,6 @@ import urllib.request
 import astropy.io.fits
 import io
 from contextlib import redirect_stdout
-import PySimpleGUI as sg
 
 
 #
