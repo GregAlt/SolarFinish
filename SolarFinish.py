@@ -207,7 +207,7 @@ def rotate_with_expand_fill(im, angle_deg):
     src = sp.ndimage.rotate(im2, angle_deg)
 
     # and then crop back to the original test rotate image dimensions
-    sy, sx = im2.shape[0:2]
+    sy, sx = src.shape[0:2]
     start_y, start_x = sy // 2 - ty // 2, sx // 2 - tx // 2
     im2 = src[start_y: start_y + ty, start_x: start_x + tx]
     return im2
