@@ -816,17 +816,39 @@ def cnrgf_enhance_part1(img, n, show_intermediate_1, fn):
     return unwarped_mean, unwarped_std_dev
 
 
+# convert img with cropping/padding to be of size shape, and midpoint at center
+def extend_to_match(img, shape, center):
+    crop_y_start = img.shape[0] // 2 - center[1]
+    crop_y_end = shape[0] - center[1] + img.shape[0] // 2
+    crop_x_start = img.shape[1] // 2 - center[0]
+    crop_x_end = shape[1] - center[0] + img.shape[1] // 2
+    cropped = img[crop_y_start:crop_y_end, crop_x_start:crop_x_end]
+
+    before_y = min(0, img.shape[0] // 2 - center[1])
+    after_y = shape[0] - cropped.shape[0] - before_y
+    before_x = min(0, img.shape[1] // 2 - center[0])
+    after_x = shape[1] - cropped.shape[1] - before_x
+
+    result = np.pad(cropped, ((before_y, after_y), (before_x, after_x)), mode='constant')
+    return result
+
+
 # CNRGF split into two parts, second part is cheaper and has tunable parameters
 # using scaleStdDev as a function that has tunable parameters baked into it.
-def cnrgf_enhance_part2(img, mean_and_stddev, scale_std_dev, show_intermediate_2, fn):
+def cnrgf_enhance_part2(img, center, mean_and_stddev, scale_std_dev, show_intermediate_2, fn):
     # adjust range of standard deviation image to get preferred range of contrast enhancement
     unwarped_mean, unwarped_std_dev = mean_and_stddev
     norm_std_dev = scale_std_dev(unwarped_std_dev)
 
     # subtract mean, divide by standard deviation, and add back mean
     enhance_factor = np.reciprocal(norm_std_dev)
-    diff = img - unwarped_mean
-    enhanced = diff * enhance_factor + unwarped_mean
+
+    # img might not be centered and square. So unwarped_mean and enhance_factor need to be
+    # first extended to be the same size and solar center as img
+    um2 = extend_to_match(unwarped_mean, img.shape, center)
+    ef2 = extend_to_match(enhance_factor, img.shape, center)
+    diff = img - um2
+    enhanced = diff * ef2 + um2
 
     if show_intermediate_2 is not None:
         show_intermediate_2(diff, norm_std_dev, enhance_factor, fn)
@@ -847,9 +869,12 @@ def cnrgf_enhance_part2(img, mean_and_stddev, scale_std_dev, show_intermediate_2
 # radius, but the problems have many similarities, and it should be possible to use the
 # algorithms interchangeably for solar images more generally, including full disk
 # white light images.
-def cnrgf_enhance(img, n, min_recip, max_recip, min_clip, show_intermediate_1, show_intermediate_2, fn):
-    mean_and_stddev = cnrgf_enhance_part1(img, n, show_intermediate_1, fn)
-    enhanced = cnrgf_enhance_part2(img, mean_and_stddev, get_std_dev_scaler(min_recip, max_recip), show_intermediate_2,
+def cnrgf_enhance(src, src_center, n, min_recip, max_recip, min_clip, show_intermediate_1, show_intermediate_2, fn):
+    # use an expanded/centered grayscale 0-1 float image for all calculations
+    src = to_float01_from_16bit(src)
+    (center, centered) = center_and_expand(src_center, src)
+    mean_and_stddev = cnrgf_enhance_part1(centered, n, show_intermediate_1, fn)
+    enhanced = cnrgf_enhance_part2(src, src_center, mean_and_stddev, get_std_dev_scaler(min_recip, max_recip), show_intermediate_2,
                                    fn)
     clipped = enhanced.clip(min=min_clip)
     normalized = cv.normalize(clipped, None, 0, 1, cv.NORM_MINMAX).clip(min=0).clip(max=1)
@@ -929,7 +954,9 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
         (new_center, new_img) = crop_to_dist(img, center, radius * crop_radius)
         nonlocal enhanced
         if should_enhance:
-            enhanced = cnrgf_enhance(new_img, 6, min_adj, max_adj, min_clip, None, None, "")
+            should_crop = True
+            if should_crop:
+                enhanced = cnrgf_enhance(new_img, new_center, 6, min_adj, max_adj, min_clip, None, None, "")
         else:
             enhanced = new_img
 
@@ -1112,9 +1139,13 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
             flush=True)
         show_rgb(image_with_circle)
 
-    enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, fn) if should_enhance else img
-    dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
-    (center, enhanced) = crop_to_dist(enhanced, center, dist)
+    should_crop = True
+    if should_crop:
+        enhanced = cnrgf_enhance(img, center, 6, min_recip, max_recip, min_clip, None, None, fn) if should_enhance else img
+        dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
+        (center, enhanced) = crop_to_dist(enhanced, center, dist)
+    else:
+        enhanced = cnrgf_enhance(src, src_center, 6, min_recip, max_recip, min_clip, None, None, fn) if should_enhance else img
 
     # brighten and colorize
     if brighten_gamma != 1.0:
@@ -1190,7 +1221,7 @@ def process_args():
     parser.add_argument('-w', '--brightenweight', type=float, default=0.5,
                         help='weight to shift gamma brightening, 1 = use gamma curve, 0 = less brightening of darker pixels')
     parser.add_argument('-e', '--enhance', type=str, default='1.5,3.0',
-                        help='contrast enhance min,max. 1 = no enhance, 5 = probably too much')
+                        help='contrast enhance min,max or no. 1 = no enhance, 5 = probably too much.')
     parser.add_argument('-c', '--crop', type=float, default=1.4, help='final crop radius in solar radii')
     parser.add_argument('-r', '--rotate', type=float, default=0.0, help='rotation in degrees')
     parser.add_argument('-d', '--darkclip', type=float, default=0.015,
@@ -1232,8 +1263,8 @@ def process_args():
     else:
         output = args.output
 
-    should_enhance = args.enhance.lower()[0:2] != 'no'
-    min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")] if should_enhance else 1, 1
+    should_enhance = not args.enhance or args.enhance.lower()[0:2] != 'no'
+    min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")] if should_enhance else [1, 1]
     h_flip = 'h' in args.flip
     v_flip = 'v' in args.flip
     return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_enhance, min_contrast_adjust, max_contrast_adjust, args.crop, args.rotate, args.darkclip, args.interact  # , args.imagealign
