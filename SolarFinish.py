@@ -35,6 +35,7 @@ __version__ = "0.13.1"
 try:
     import google.colab.files
     import IPython.display
+
     IN_COLAB = True
     import matplotlib.pyplot as plt
     import ipywidgets as widgets
@@ -200,7 +201,7 @@ def rotate_with_expand_fill(im, angle_deg):
 
     # expand unrotated image using border fill
     temp_center = (im.shape[1] // 2, im.shape[0] // 2)
-    expand_dist = center_and_expand_get_dist((tx//2, ty//2), test_shape)
+    expand_dist = center_and_expand_get_dist((tx // 2, ty // 2), test_shape)
     temp_center, im2 = center_and_expand_to_dist(temp_center, im, expand_dist)
 
     # rotate the expanded image
@@ -303,7 +304,7 @@ def shrink(im, div):
 
 # scale image by percent
 def zoom_image(im, zoom):
-    return cv.resize(im, np.floor_divide((int(im.shape[1]*zoom), int(im.shape[0]*zoom)), 100))
+    return cv.resize(im, np.floor_divide((int(im.shape[1] * zoom), int(im.shape[0] * zoom)), 100))
 
 
 # Return an image with circle drawn on it for visualizing circle finding
@@ -342,6 +343,7 @@ def center_and_expand_get_dist(center, shape):
 # fully cropped out at the end.
 def center_and_expand(center, src):
     return center_and_expand_to_dist(center, src, center_and_expand_get_dist(center, src.shape))
+
 
 # Crop image to a square with given min distance from center. Return new image and center.
 # If specified min_dist is too large clamp it, because this function can only crop
@@ -784,16 +786,21 @@ def display_and_download(im, text, should_download, fn, suffix):
 
 # Visualization and download of intermediate images for enhancement process, for part 1
 def display_cnrgf_intermediate_1(polar_image, mean_image, unwarped_mean, fn):
-    #display_and_download(polar_image, "Displaying intermediate image: polar warp the image as an initial step to make a pseudo-flat", False, fn, "")
-    #display_and_download(mean_image, "Displaying intermediate image: mean filter on polar warp image", False, fn, "")
-    display_and_download(unwarped_mean, "Displaying intermediate image: unwarped mean pseudo-flat", True, fn, "unwarpedmean")
+    # display_and_download(polar_image, "Displaying intermediate image: polar warp the image as an initial step to make a pseudo-flat", False, fn, "")
+    # display_and_download(mean_image, "Displaying intermediate image: mean filter on polar warp image", False, fn, "")
+    display_and_download(unwarped_mean, "Displaying intermediate image: unwarped mean pseudo-flat", True, fn,
+                         "unwarpedmean")
 
 
 # Visualization and download of intermediate images for enhancement process, for part 2
 def display_cnrgf_intermediate_2(diff, norm_std_dev, enhance_factor, fn):
-    display_and_download(diff + 0.5, "Displaying intermediate image: subtract pseudo-flat from input image", True, fn, "diff")
-    display_and_download(norm_std_dev, "Displaying intermediate image: standard deviation filter, to drive contrast enhancement", False, fn, "")
-    display_and_download((diff * enhance_factor + 0.5).clip(min=0, max=1), "Displaying intermediate image: enhanced contrast in diff image", True, fn, "diff-enhanced")
+    display_and_download(diff + 0.5, "Displaying intermediate image: subtract pseudo-flat from input image", True, fn,
+                         "diff")
+    display_and_download(norm_std_dev,
+                         "Displaying intermediate image: standard deviation filter, to drive contrast enhancement",
+                         False, fn, "")
+    display_and_download((diff * enhance_factor + 0.5).clip(min=0, max=1),
+                         "Displaying intermediate image: enhanced contrast in diff image", True, fn, "diff-enhanced")
 
 
 # CNRGF split into two parts, first part does expensive convolutions
@@ -842,7 +849,8 @@ def cnrgf_enhance_part2(img, mean_and_stddev, scale_std_dev, show_intermediate_2
 # white light images.
 def cnrgf_enhance(img, n, min_recip, max_recip, min_clip, show_intermediate_1, show_intermediate_2, fn):
     mean_and_stddev = cnrgf_enhance_part1(img, n, show_intermediate_1, fn)
-    enhanced = cnrgf_enhance_part2(img, mean_and_stddev, get_std_dev_scaler(min_recip, max_recip), show_intermediate_2, fn)
+    enhanced = cnrgf_enhance_part2(img, mean_and_stddev, get_std_dev_scaler(min_recip, max_recip), show_intermediate_2,
+                                   fn)
     clipped = enhanced.clip(min=min_clip)
     normalized = cv.normalize(clipped, None, 0, 1, cv.NORM_MINMAX).clip(min=0).clip(max=1)
     return normalized
@@ -852,7 +860,8 @@ def cnrgf_enhance(img, n, min_recip, max_recip, min_clip, show_intermediate_1, s
 # Interactive
 
 # Drive interactive adjustment and visualization of parameters with sliders, return final params selected
-def interactive_adjust(filename, src,  min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation):
+def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius,
+                       h_flip, v_flip, rotation):
     def on_change_min(val):
         nonlocal min_adj
         min_adj = val
@@ -914,10 +923,14 @@ def interactive_adjust(filename, src,  min_adj, max_adj, gamma, gamma_weight, mi
     def update_enhance():
         (new_center, new_img) = crop_to_dist(img, center, radius * crop_radius)
         nonlocal enhanced
-        enhanced = cnrgf_enhance(new_img, 6, min_adj, max_adj, min_clip, None, None, "")
+        if should_enhance:
+            enhanced = cnrgf_enhance(new_img, 6, min_adj, max_adj, min_clip, None, None, "")
+        else:
+            enhanced = new_img
 
     def make_image_window(win_size, controls):
-        image_col = sg.Column([[sg.Image(key='-IMAGE-')]], size=win_size, expand_x=True, expand_y=True, scrollable=True, key='-SCROLLABLE-')
+        image_col = sg.Column([[sg.Image(key='-IMAGE-')]], size=win_size, expand_x=True, expand_y=True, scrollable=True,
+                              key='-SCROLLABLE-')
         return sg.Window('SolarFinish ' + filename, [[image_col, sg.Column(controls)]], resizable=True, finalize=True)
 
     def update_image(win, im):
@@ -930,7 +943,8 @@ def interactive_adjust(filename, src,  min_adj, max_adj, gamma, gamma_weight, mi
         nonlocal enhanced
         enhanced_rot = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation)
         brightened = brighten(enhanced_rot, gamma, gamma_weight)
-        enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75)) if show_colorized else swap_rb(colorize8_rgb(brightened, 1, 1, 1))
+        enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75)) if show_colorized else swap_rb(
+            colorize8_rgb(brightened, 1, 1, 1))
         nonlocal window
         update_image(window, zoom_image(enhance8, zoom))
 
@@ -953,34 +967,54 @@ def interactive_adjust(filename, src,  min_adj, max_adj, gamma, gamma_weight, mi
     enhanced = np.zeros(0)
     show_colorized = True
     zoom = 33
-    layout = [[sg.Text('Click when finished adjusting: '), sg.Text('Done', enable_events=True, key='Exit', relief="raised", border_width=5, expand_x=True, justification='center'),
+    layout = [[sg.Text('Click when finished adjusting: '),
+               sg.Text('Done', enable_events=True, key='Exit', relief="raised", border_width=5, expand_x=True,
+                       justification='center'),
                sg.Checkbox('Show Colorized', True, enable_events=True, key='-COLORIZE-')],
-       [sg.Text('MinAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=min_adj, expand_x=True, enable_events=True, orientation='h', key='-MINADJUST-')],
-       [sg.Text('MaxAdjust', size=(12, 1)), sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=max_adj, expand_x=True, enable_events=True, orientation='h', key='-MAXADJUST-')],
-       [sg.Text('Gamma', size=(12, 1)), sg.Slider(range=(0.1, 3.0), resolution=0.025, default_value=gamma, expand_x=True, enable_events=True, orientation='h', key='-GAMMA-')],
-       [sg.Text('GammaWeight', size=(12, 1)), sg.Slider(range=(0.0, 1.0), resolution=0.05, default_value=gamma_weight, expand_x=True, enable_events=True, orientation='h', key='-GAMMAWEIGHT-')],
-       [sg.Text('DarkClip', size=(12, 1)), sg.Slider(range=(0.0, 0.5), resolution=0.001, default_value=min_clip, expand_x=True, enable_events=True, orientation='h', key='-DARKCLIP-')],
-       [sg.Text('CropRadius', size=(12, 1)), sg.Slider(range=(1.0, 2.5), resolution=0.05, default_value=crop_radius, expand_x=True, enable_events=True, orientation='h', key='-CROPRADIUS-')],
-       [sg.Text('Rotation', size=(12, 1)), sg.Slider(range=(0.0, 360.0), resolution=0.1, default_value=rotation, expand_x=True, enable_events=True, orientation='h', key='-ROTATION-')],
-       [sg.Checkbox('Horizontal Flip', default=h_flip, enable_events=True, key='-HFLIP-')],
-       [sg.Checkbox('Vertical Flip', default=v_flip, enable_events=True, key='-VFLIP-')],
-       [sg.HorizontalSeparator()],
-       [sg.Text('Zoom', size=(12, 1)), sg.Slider(range=(10, 100), resolution=1, default_value=zoom, expand_x=True, enable_events=True, orientation='h', key='-ZOOM-')]]
+              [sg.Text('MinAdjust', size=(12, 1)),
+               sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=min_adj, expand_x=True, enable_events=True,
+                         orientation='h', key='-MINADJUST-')],
+              [sg.Text('MaxAdjust', size=(12, 1)),
+               sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=max_adj, expand_x=True, enable_events=True,
+                         orientation='h', key='-MAXADJUST-')],
+              [sg.Text('Gamma', size=(12, 1)),
+               sg.Slider(range=(0.1, 3.0), resolution=0.025, default_value=gamma, expand_x=True, enable_events=True,
+                         orientation='h', key='-GAMMA-')],
+              [sg.Text('GammaWeight', size=(12, 1)),
+               sg.Slider(range=(0.0, 1.0), resolution=0.05, default_value=gamma_weight, expand_x=True,
+                         enable_events=True, orientation='h', key='-GAMMAWEIGHT-')],
+              [sg.Text('DarkClip', size=(12, 1)),
+               sg.Slider(range=(0.0, 0.5), resolution=0.001, default_value=min_clip, expand_x=True, enable_events=True,
+                         orientation='h', key='-DARKCLIP-')],
+              [sg.Text('CropRadius', size=(12, 1)),
+               sg.Slider(range=(1.0, 2.5), resolution=0.05, default_value=crop_radius, expand_x=True,
+                         enable_events=True, orientation='h', key='-CROPRADIUS-')],
+              [sg.Text('Rotation', size=(12, 1)),
+               sg.Slider(range=(0.0, 360.0), resolution=0.1, default_value=rotation, expand_x=True, enable_events=True,
+                         orientation='h', key='-ROTATION-')],
+              [sg.Checkbox('Horizontal Flip', default=h_flip, enable_events=True, key='-HFLIP-')],
+              [sg.Checkbox('Vertical Flip', default=v_flip, enable_events=True, key='-VFLIP-')],
+              [sg.HorizontalSeparator()],
+              [sg.Text('Zoom', size=(12, 1)),
+               sg.Slider(range=(10, 100), resolution=1, default_value=zoom, expand_x=True, enable_events=True,
+                         orientation='h', key='-ZOOM-')]]
     window = make_image_window((500, 500), layout)
     update()
-    callbacks = { '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
-                  '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip, '-CROPRADIUS-': on_change_radius,
-                  '-ROTATION-': on_change_rotation, '-COLORIZE-': on_change_colorize, '-ZOOM-': on_change_zoom,
-                  '-HFLIP-': on_change_horiz_flip, '-VFLIP-': on_change_vert_flip}
+    callbacks = {'-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
+                 '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip,
+                 '-CROPRADIUS-': on_change_radius,
+                 '-ROTATION-': on_change_rotation, '-COLORIZE-': on_change_colorize, '-ZOOM-': on_change_zoom,
+                 '-HFLIP-': on_change_horiz_flip, '-VFLIP-': on_change_vert_flip}
     while True:
-       event, values = window.read()
-       if event == sg.WIN_CLOSED or event == 'Exit':
-          break
-       elif event in callbacks:
-          callbacks[event](values[event])
+        event, values = window.read()
+        if event == sg.WIN_CLOSED or event == 'Exit':
+            break
+        elif event in callbacks:
+            callbacks[event](values[event])
     window.close()
 
-    return min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation
+    return should_enhance, min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation
+
 
 #
 # main - drive the high-level flow
@@ -1018,7 +1052,9 @@ def flip_image(im, horiz, vert):
 # High-level flow to align a single image, given a date to compare against
 def align_image(im, date, silent):
     if not silent:
-        print(f"Aligning with GONG image from {date}. This might take a minute. Displaying input image before alignment:", flush=True)
+        print(
+            f"Aligning with GONG image from {date}. This might take a minute. Displaying input image before alignment:",
+            flush=True)
         show_float01(to_float01_from_16bit(im))
 
     date = date.replace('-', '/')
@@ -1028,14 +1064,17 @@ def align_image(im, date, silent):
     if not silent:
         print(f"Displaying GONG image used for alignment:", flush=True)
         show_float01(gong)
-        print(f"\nAlignment result: angle is {angle}{' and horizontally flipped' if flipped else ''}. Equivalent to command line args:", flush=True)
+        print(
+            f"\nAlignment result: angle is {angle}{' and horizontally flipped' if flipped else ''}. Equivalent to command line args:",
+            flush=True)
         print(f"     --rotate {angle} {'--flip h' if flipped else ''}", flush=True)
 
     return flipped, angle
 
 
 # Process a single image, with optional verbose output.
-def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip, rotation, interact, fn, silent):
+def process_image(src, min_recip, should_enhance, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip,
+                  rotation, interact, fn, silent):
     src = flip_image(src, h_flip, v_flip)
     if rotation != 0.0:
         src = rotate_with_expand_fill(src, rotation)
@@ -1062,10 +1101,11 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
         image_with_circle = add_circle(gray2rgb(img), center, radius, (1, 0, 0), 3)
         solar_radius_in_km = 695700
         print(
-            f"Circle found with radius {radius} and center {src_center[0]},{src_center[1]}. Pixel size is about {solar_radius_in_km / radius:.1f}km. Displaying sun with circle found--should be very close to the edge of the photosphere.", flush=True)
+            f"Circle found with radius {radius} and center {src_center[0]},{src_center[1]}. Pixel size is about {solar_radius_in_km / radius:.1f}km. Displaying sun with circle found--should be very close to the edge of the photosphere.",
+            flush=True)
         show_rgb(image_with_circle)
 
-    enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, fn)
+    enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, fn) if should_enhance else img
     dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
     (center, enhanced) = crop_to_dist(enhanced, center, dist)
 
@@ -1087,7 +1127,8 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
 
 
 # Process a single image - from filename or URL
-def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_contrast_adjust, max_contrast_adjust,
+def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, should_enhance, min_contrast_adjust,
+               max_contrast_adjust,
                brighten_gamma, gamma_weight, crop_radius, dark_clip, rotation, interact):
     src, filename = fetch_image(filename_or_url)
 
@@ -1096,25 +1137,29 @@ def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_
         h_flip, rotation = align_image(src, date, silent)
 
     if not IN_COLAB and interact:
-        params = interactive_adjust(filename, src, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
+        params = interactive_adjust(filename, src, should_enhance, min_contrast_adjust, max_contrast_adjust,
+                                    brighten_gamma,
                                     gamma_weight, dark_clip, crop_radius, h_flip, v_flip, rotation)
         if params is None:
             return None
-        (min_recip, max_recip, brighten_gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation) = params
+        (should_enhance, min_recip, max_recip, brighten_gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip,
+         rotation) = params
         print("\nCommand line equivalent to adjusted parameters:")
-        hv = ("h" if h_flip else "")+("v" if v_flip else "")
+        hv = ("h" if h_flip else "") + ("v" if v_flip else "")
         flip = " --flip " + hv if h_flip or v_flip else ""
+        enhance_val = str(min_recip) + ', ' + str(max_recip) if should_enhance else 'no'
         print(
-            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius}{flip} --rotate {rotation} --darkclip {min_clip}\n", flush=True)
+            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {enhance_val} --crop {crop_radius}{flip} --rotate {rotation} --darkclip {min_clip}\n",
+            flush=True)
 
-    enhance16 = process_image(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                              crop_radius, dark_clip, h_flip, v_flip, rotation, interact, filename, silent)
+    enhance16 = process_image(src, should_enhance, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
+                              gamma_weight, crop_radius, dark_clip, h_flip, v_flip, rotation, interact, filename, silent)
 
     return enhance16, filename
 
 
 def popup_get_file(save_as, folder, default):
-    filename = sg.popup_get_file('', save_as=save_as, no_window=True,initial_folder=folder, default_path=default)
+    filename = sg.popup_get_file('', save_as=save_as, no_window=True, initial_folder=folder, default_path=default)
     return filename
 
 
@@ -1164,7 +1209,7 @@ def process_args():
         elif is_url(args.filename):
             fn_list = [args.filename]
     elif not IN_COLAB:
-        args.interact = True # no file specified, force interactive mode
+        args.interact = True  # no file specified, force interactive mode
         fn = popup_get_file(False, directory, "")
         if os.path.isfile(fn):
             directory = os.path.dirname(fn)
@@ -1180,10 +1225,11 @@ def process_args():
     else:
         output = args.output
 
-    min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")]
+    should_enhance = args.enhance.lower()[0:2] != 'no'
+    min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")] if should_enhance else 0, 0
     h_flip = 'h' in args.flip
     v_flip = 'v' in args.flip
-    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, min_contrast_adjust, max_contrast_adjust, args.crop, args.rotate, args.darkclip, args.interact  # , args.imagealign
+    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_enhance, min_contrast_adjust, max_contrast_adjust, args.crop, args.rotate, args.darkclip, args.interact  # , args.imagealign
 
 
 def main():
@@ -1209,14 +1255,16 @@ continue to evolve, and don't expect much tech support.
     should_use_url = False  # @param {type:"boolean"}
     url_to_use = "https://www.cloudynights.com/uploads/monthly_01_2023/post-412916-0-66576300-1674591059.jpg"  # @param{type:"string"}
     fallback_url = 'https://www.cloudynights.com/uploads/gallery/album_24182/gallery_79290_24182_1973021.png'
+    should_enhance = True
 
     # get the solar disk image
     if IN_COLAB:
-        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, interact = ([""], False, ".", False, False, ".", False, "", False)
+        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, interact = (
+        [""], False, ".", False, False, ".", False, "", False)
         print("Upload full disk solar image now, or click cancel to use default test image")
         fn_list[0] = url_to_use if should_use_url else upload_file()
     else:
-        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, min_contrast_adjust, max_contrast_adjust, crop_radius, rotation, dark_clip, interact = process_args()
+        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, should_enhance, min_contrast_adjust, max_contrast_adjust, crop_radius, rotation, dark_clip, interact = process_args()
 
     suffix = f"minc_{str(min_contrast_adjust)}_maxc_{str(max_contrast_adjust)}_g{str(brighten_gamma)}" if append else ""
     if gong_align_date != "":
@@ -1232,8 +1280,8 @@ continue to evolve, and don't expect much tech support.
     for fn in fn_list:
         full_name = fn if is_url(fn) else directory + '/' + fn
         result = image_main(full_name, silent, h_flip, v_flip, should_align_first, date_if_aligning,
-                                       min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                                       crop_radius, dark_clip, rotation, interact)
+                            should_enhance, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
+                            crop_radius, dark_clip, rotation, interact)
         if result is not None and not IN_COLAB:
             enhance16, out_fn = result
             out_fn = output_directory + '/' + os.path.basename(out_fn)  # replace input dir without output dir
