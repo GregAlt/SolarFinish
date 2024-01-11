@@ -1034,32 +1034,8 @@ def align_image(im, date, silent):
     return flipped, angle
 
 
-# Process a single image, silently
-def silent_process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip, rotation):
-    src = flip_image(src, h_flip, v_flip)
-    if rotation != 0.0:
-        src = rotate_with_expand_fill(src, rotation)
-
-    (is_valid, src_center, radius) = find_valid_circle(src)
-    if not is_valid:
-        return None
-
-    # use an expanded/centered grayscale 0-1 float image for all calculations
-    (center, centered) = center_and_expand(src_center, src)
-    img = to_float01_from_16bit(centered)
-
-    enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, "")
-    dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
-    (center, enhanced) = crop_to_dist(enhanced, center, dist)
-
-    # brighten and colorize
-    enhanced = brighten(enhanced, brighten_gamma, gamma_weight)
-    enhance16 = colorize16_bgr(enhanced, 0.5, 1.25, 3.75)
-    return enhance16
-
-
-# Process a single image, with verbose output. Includes interactive adjustment if interact=True
-def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip, rotation, interact, fn):
+# Process a single image, with optional verbose output.
+def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip, rotation, interact, fn, silent):
     src = flip_image(src, h_flip, v_flip)
     if rotation != 0.0:
         src = rotate_with_expand_fill(src, rotation)
@@ -1067,34 +1043,39 @@ def process_image(src, min_recip, max_recip, brighten_gamma, gamma_weight, crop_
     # find the solar disk circle
     (is_valid, src_center, radius) = find_valid_circle(src)
     if not is_valid:
-        print("Error: Couldn't find valid circle for input solar disk!", flush=True)
+        print("Error: Couldn't find valid circle for input solar disk! " + fn, flush=True)
         return None
-
-    # show original image as uploaded
-    print(f"\nDisplaying input image, size is {src.shape[1]},{src.shape[0]}:", flush=True)
-    show_float01(to_float01_from_16bit(src))
 
     # use an expanded/centered grayscale 0-1 float image for all calculations
     (center, centered) = center_and_expand(src_center, src)
     img = to_float01_from_16bit(centered)
-    show_float01(img)
 
-    # show image with circle drawn
-    image_with_circle = add_circle(gray2rgb(img), center, radius, (1, 0, 0), 3)
-    solar_radius_in_km = 695700
-    print(
-        f"Circle found with radius {radius} and center {src_center[0]},{src_center[1]}. Pixel size is about {solar_radius_in_km / radius:.1f}km. Displaying sun with circle found--should be very close to the edge of the photosphere.", flush=True)
-    show_rgb(image_with_circle)
+    if not silent:
+        # show original image as uploaded
+        print(f"\nDisplaying input image, size is {src.shape[1]},{src.shape[0]}:", flush=True)
+        show_float01(to_float01_from_16bit(src))
+
+        # show image centered
+        show_float01(img)
+
+        # show image with circle drawn
+        image_with_circle = add_circle(gray2rgb(img), center, radius, (1, 0, 0), 3)
+        solar_radius_in_km = 695700
+        print(
+            f"Circle found with radius {radius} and center {src_center[0]},{src_center[1]}. Pixel size is about {solar_radius_in_km / radius:.1f}km. Displaying sun with circle found--should be very close to the edge of the photosphere.", flush=True)
+        show_rgb(image_with_circle)
 
     enhanced = cnrgf_enhance(img, 6, min_recip, max_recip, min_clip, None, None, fn)
     dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
     (center, enhanced) = crop_to_dist(enhanced, center, dist)
 
     # brighten and colorize
-    enhanced = brighten(enhanced, brighten_gamma, gamma_weight)
+    if brighten_gamma != 1.0:
+        enhanced = brighten(enhanced, brighten_gamma, gamma_weight)
     enhance8 = colorize8_rgb(enhanced, 0.5, 1.25, 3.75)
     enhance16 = colorize16_bgr(enhanced, 0.5, 1.25, 3.75)
-    if not interact:
+
+    if not silent and not interact:
         print("Displaying grayscale enhanced result:", flush=True)
         show_float01(enhanced)
         download_button(float01_to_16bit(enhanced), fn, "enhancedgraybright")
@@ -1126,12 +1107,8 @@ def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_
         print(
             f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {min_recip},{max_recip} --crop {crop_radius}{flip} --rotate {rotation} --darkclip {min_clip}\n", flush=True)
 
-    if silent:
-        enhance16 = silent_process_image(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                                         crop_radius, dark_clip, h_flip, v_flip, rotation)
-    else:
-        enhance16 = process_image(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                                  crop_radius, dark_clip, h_flip, v_flip, rotation, interact, filename)
+    enhance16 = process_image(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
+                              crop_radius, dark_clip, h_flip, v_flip, rotation, interact, filename, silent)
 
     return enhance16, filename
 
