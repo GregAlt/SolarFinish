@@ -902,6 +902,11 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
         show_colorized = val
         update_post_enhance()
 
+    def on_enhance_change(val):
+        nonlocal should_enhance
+        should_enhance = val
+        update()
+
     def on_change_zoom(val):
         nonlocal zoom
         zoom = val
@@ -971,6 +976,7 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
                sg.Text('Done', enable_events=True, key='Exit', relief="raised", border_width=5, expand_x=True,
                        justification='center'),
                sg.Checkbox('Show Colorized', True, enable_events=True, key='-COLORIZE-')],
+              [sg.Checkbox('Enhance', should_enhance, enable_events=True, key='-ENHANCE-')],
               [sg.Text('MinAdjust', size=(12, 1)),
                sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=min_adj, expand_x=True, enable_events=True,
                          orientation='h', key='-MINADJUST-')],
@@ -1000,7 +1006,8 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
                          orientation='h', key='-ZOOM-')]]
     window = make_image_window((500, 500), layout)
     update()
-    callbacks = {'-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
+    callbacks = {'-ENHANCE-': on_enhance_change,
+                 '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
                  '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip,
                  '-CROPRADIUS-': on_change_radius,
                  '-ROTATION-': on_change_rotation, '-COLORIZE-': on_change_colorize, '-ZOOM-': on_change_zoom,
@@ -1073,7 +1080,7 @@ def align_image(im, date, silent):
 
 
 # Process a single image, with optional verbose output.
-def process_image(src, min_recip, should_enhance, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip,
+def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gamma_weight, crop_radius, min_clip, h_flip, v_flip,
                   rotation, interact, fn, silent):
     src = flip_image(src, h_flip, v_flip)
     if rotation != 0.0:
@@ -1226,7 +1233,7 @@ def process_args():
         output = args.output
 
     should_enhance = args.enhance.lower()[0:2] != 'no'
-    min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")] if should_enhance else 0, 0
+    min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")] if should_enhance else 1, 1
     h_flip = 'h' in args.flip
     v_flip = 'v' in args.flip
     return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_enhance, min_contrast_adjust, max_contrast_adjust, args.crop, args.rotate, args.darkclip, args.interact  # , args.imagealign
