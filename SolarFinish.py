@@ -852,7 +852,7 @@ def cnrgf_enhance(img, n, min_recip, max_recip, min_clip, show_intermediate_1, s
 # Interactive
 
 # Drive interactive adjustment and visualization of parameters with sliders, return final params selected
-def interactive_adjust(src,  min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation):
+def interactive_adjust(filename, src,  min_adj, max_adj, gamma, gamma_weight, min_clip, crop_radius, h_flip, v_flip, rotation):
     def on_change_min(val):
         nonlocal min_adj
         min_adj = val
@@ -918,7 +918,7 @@ def interactive_adjust(src,  min_adj, max_adj, gamma, gamma_weight, min_clip, cr
 
     def make_image_window(win_size, controls):
         image_col = sg.Column([[sg.Image(key='-IMAGE-')]], size=win_size, expand_x=True, expand_y=True, scrollable=True, key='-SCROLLABLE-')
-        return sg.Window('SolarFinish', [[image_col, sg.Column(controls)]], resizable=True, finalize=True)
+        return sg.Window('SolarFinish ' + filename, [[image_col, sg.Column(controls)]], resizable=True, finalize=True)
 
     def update_image(win, im):
         win['-IMAGE-'].update(size=(im.shape[1], im.shape[0]), data=cv.imencode('.png', im)[1].tobytes())
@@ -1115,7 +1115,7 @@ def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, min_
         h_flip, rotation = align_image(src, date, silent)
 
     if not IN_COLAB and interact:
-        params = interactive_adjust(src, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
+        params = interactive_adjust(filename, src, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
                                     gamma_weight, dark_clip, crop_radius, h_flip, v_flip, rotation)
         if params is None:
             return None
