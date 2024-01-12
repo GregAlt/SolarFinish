@@ -47,11 +47,11 @@ When running in interactive mode with the --interact or -i command line argument
 - **Crop Radius** controls the size of the final image crop
 - **Rotation** controls the rotation of the image, to let you manually align
 - **Horizontal/Vertical Flip** flips the image horizontally or vertically or both
+- **Colorize Red/Green/Blue** adjust gamma curves for each color. Smaller is brighter
 
 And view controls that have no effect on the generated image:
 - **Show Colorized**: toggles between grayscale and colorized view
 - **Zoom** lets you zoom out to see full disk even for large image sizes
-- **Colorize Red/Green/Blue** adjust gamma curves for each color. Smaller is brighter
 
 More details:
 ```
