@@ -870,8 +870,6 @@ def cnrgf_enhance_part2(img, center, mean_and_stddev, scale_std_dev, show_interm
 # algorithms interchangeably for solar images more generally, including full disk
 # white light images.
 def cnrgf_enhance(src, src_center, n, min_recip, max_recip, min_clip, show_intermediate_1, show_intermediate_2, fn):
-    # use an expanded/centered grayscale 0-1 float image for all calculations
-    src = to_float01_from_16bit(src)
     (center, centered) = center_and_expand(src_center, src)
     mean_and_stddev = cnrgf_enhance_part1(centered, n, show_intermediate_1, fn)
     enhanced = cnrgf_enhance_part2(src, src_center, mean_and_stddev, get_std_dev_scaler(min_recip, max_recip), show_intermediate_2,
@@ -961,7 +959,7 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
         nonlocal enhanced
         c1, im1 = center_and_expand(src_center, src)
         c2, im2 = crop_to_dist(im1, c1, radius * crop_radius) if should_crop else (src_center, src)
-        enhanced = cnrgf_enhance(im2, c2, 6, min_adj, max_adj, min_clip, None, None, "") if should_enhance else to_float01_from_16bit(im2)
+        enhanced = cnrgf_enhance(im2, c2, 6, min_adj, max_adj, min_clip, None, None, "") if should_enhance else im2
 
     def make_image_window(win_size, controls):
         image_col = sg.Column([[sg.Image(key='-IMAGE-')]], size=win_size, expand_x=True, expand_y=True, scrollable=True,
@@ -994,6 +992,8 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
         print("Error: Couldn't find valid circle for input solar disk!", flush=True)
         return None
 
+    # use grayscale 0-1 float image for all calculations
+    src = to_float01_from_16bit(src)
     src = flip_image(src, h_flip, v_flip)
     src_center = flip_center(src_center, src, h_flip, v_flip)
 
@@ -1119,7 +1119,9 @@ def align_image(im, date, silent):
 # Process a single image, with optional verbose output.
 def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gamma_weight, should_crop, crop_radius, min_clip, h_flip, v_flip,
                   rotation, interact, fn, silent):
-    src = flip_image(src, h_flip, v_flip)
+    if h_flip or v_flip:
+        src = flip_image(src, h_flip, v_flip)
+
     if rotation != 0.0:
         src = rotate_with_expand_fill(src, rotation)
 
@@ -1129,20 +1131,13 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
         print("Error: Couldn't find valid circle for input solar disk! " + fn, flush=True)
         return None
 
-    # use an expanded/centered grayscale 0-1 float image for all calculations
-    (center, centered) = center_and_expand(src_center, src)
-    img = to_float01_from_16bit(centered)
-
     if not silent:
         # show original image as uploaded
         print(f"\nDisplaying input image, size is {src.shape[1]},{src.shape[0]}:", flush=True)
         show_float01(to_float01_from_16bit(src))
 
-        # show image centered
-        show_float01(img)
-
         # show image with circle drawn
-        image_with_circle = add_circle(gray2rgb(img), center, radius, (1, 0, 0), 3)
+        image_with_circle = add_circle(gray2rgb(src), src_center, radius, (1, 0, 0), 3)
         solar_radius_in_km = 695700
         print(
             f"Circle found with radius {radius} and center {src_center[0]},{src_center[1]}. Pixel size is about {solar_radius_in_km / radius:.1f}km. Displaying sun with circle found--should be very close to the edge of the photosphere.",
@@ -1150,11 +1145,16 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
         show_rgb(image_with_circle)
 
     if should_crop:
+        # use an expanded/centered grayscale 0-1 float image for all calculations
+        (center, centered) = center_and_expand(src_center, src)
+        img = to_float01_from_16bit(centered)
+
         enhanced = cnrgf_enhance(img, center, 6, min_recip, max_recip, min_clip, None, None, fn) if should_enhance else img
         dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
         (center, enhanced) = crop_to_dist(enhanced, center, dist)
     else:
-        enhanced = cnrgf_enhance(src, src_center, 6, min_recip, max_recip, min_clip, None, None, fn) if should_enhance else to_float01_from_16bit(src)
+        src = to_float01_from_16bit(src)
+        enhanced = cnrgf_enhance(src, src_center, 6, min_recip, max_recip, min_clip, None, None, fn) if should_enhance else src
 
     # brighten and colorize
     if brighten_gamma != 1.0:
