@@ -1188,8 +1188,7 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
 
     # brighten and colorize
     orig_enhanced = enhanced
-    if brighten_gamma != 1.0:
-        grayscale_result = brighten(enhanced, brighten_gamma, gamma_weight)
+    grayscale_result = brighten(enhanced, brighten_gamma, gamma_weight) if brighten_gamma != 1.0 else enhanced
 
     #shrunk = shrink(orig_enhanced, 5)  # shrink to make this go faster
     #adjusted_gamma = find_gamma_for_colorized(shrunk, brighten_gamma, gamma_weight, 0.5, 1.25, 3.75)
