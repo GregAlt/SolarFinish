@@ -1,5 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.13.3"
+__version__ = "0.13.4"
 
 # TODOS        - clarify silent, interact, verbose modes
 #              - possibly add invert option - can just take 1- final grayscale
@@ -950,6 +950,19 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
         v_flip = val
         update()
 
+    def do_align(date):
+        nonlocal v_flip, h_flip, rotation, src_center, src
+        old_v, old_h = v_flip, h_flip
+        v_flip = False
+        h_flip, rotation = align_image(src16_unflipped, date, False)
+        src = flip_image(src, h_flip != old_h, v_flip != old_v)
+        src_center = flip_center(src_center, src, h_flip != old_h, v_flip != old_v)
+        window['-VFLIP-'].update(v_flip)
+        window['-HFLIP-'].update(h_flip)
+        window['-ROTATION-'].update(rotation)
+        cv.destroyAllWindows()
+        update()
+
     # this is the expensive part
     def update_enhance():
         nonlocal enhanced
@@ -996,6 +1009,7 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
         return None
 
     # use grayscale 0-1 float image for all calculations
+    src16_unflipped = src
     src = to_float01_from_16bit(src)
     src = flip_image(src, h_flip, v_flip)
     src_center = flip_center(src_center, src, h_flip, v_flip)
@@ -1043,9 +1057,14 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
                sg.Slider(range=(0.0,6.0), resolution=0.05, default_value=rgb_weights[2], expand_x=True,
                          enable_events=True, orientation='h', key='-BLUE-')],
               [sg.HorizontalSeparator()],
+              [sg.CalendarButton('Align Date:', close_when_date_chosen=True,  target='-DATE-', format='%Y-%m-%d',),
+               sg.Input(key='-DATE-', size=(15,1), default_text=datetime.datetime.today().strftime('%Y-%m-%d')),
+               sg.Button('Align', enable_events=True, key='-ALIGN-'), sg.Text("Takes a minute!")],
+              [sg.HorizontalSeparator()],
               [sg.Text('Zoom', size=(12, 1)),
                sg.Slider(range=(10, 300), resolution=1, default_value=zoom, expand_x=True, enable_events=True,
-                         orientation='h', key='-ZOOM-')]]
+                         orientation='h', key='-ZOOM-')],
+]
     window = make_image_window((500, 500), layout)
     update()
     callbacks = {'-RED-': on_change_red, '-GREEN-': on_change_green, '-BLUE-': on_change_blue,
@@ -1059,6 +1078,8 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
         event, values = window.read()
         if event == sg.WIN_CLOSED or event == 'Exit':
             break
+        elif event == '-ALIGN-':
+            do_align(values['-DATE-'])
         elif event in callbacks:
             callbacks[event](values[event])
     window.close()
