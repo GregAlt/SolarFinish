@@ -121,10 +121,16 @@ def gray2rgb(im):
 
 
 # Colorize 0-1 float image with given RGB gamma values,
+# then return as 0-1 float image with B and R swapped
+def colorize_float_bgr(result, r, g, b):
+    bgr = (np.power(result, b), np.power(result, g), np.power(result, r))
+    return cv.merge(bgr)
+
+
+# Colorize 0-1 float image with given RGB gamma values,
 # then return as 0-65535 16 bit image with B and R swapped
 def colorize16_bgr(result, r, g, b):
-    bgr = (np.power(result, b), np.power(result, g), np.power(result, r))
-    return float01_to_16bit(cv.merge(bgr))
+    return float01_to_16bit(colorize_float_bgr(result, r, g, b))
 
 
 # Colorize 0-1 float image with given RGB gamma values, then return as 0-255 8 bit image in RGB format
@@ -862,7 +868,7 @@ def cnrgf_enhance(src, src_center, n, min_recip, max_recip, min_clip, show_inter
 
 # Drive interactive adjustment and visualization of parameters with sliders, return final params selected
 def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, gamma_weight, min_clip, should_crop, crop_radius,
-                       h_flip, v_flip, rotation):
+                       h_flip, v_flip, rotation, rgb_weights):
     def on_change_min(val):
         nonlocal min_adj
         min_adj = val
@@ -916,7 +922,19 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
     def on_change_zoom(val):
         nonlocal zoom
         zoom = val
-        update()
+        update_post_enhance()
+
+    def on_change_red(val):
+        rgb_weights[0] = val
+        update_post_enhance()
+
+    def on_change_green(val):
+        rgb_weights[1] = val
+        update_post_enhance()
+
+    def on_change_blue(val):
+        rgb_weights[2] = val
+        update_post_enhance()
 
     def on_change_horiz_flip(val):
         nonlocal h_flip, src, src_center
@@ -953,11 +971,18 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
     def update_post_enhance():
         nonlocal enhanced
         enhanced_rot = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation)
-        brightened = brighten(enhanced_rot, gamma, gamma_weight)
-        enhance8 = swap_rb(colorize8_rgb(brightened, 0.5, 1.25, 3.75)) if show_colorized else swap_rb(
-            colorize8_rgb(brightened, 1, 1, 1))
-        nonlocal window
-        update_image(window, zoom_image(enhance8, zoom))
+
+        if show_colorized:
+            #shrunk = shrink(enhanced_rot, 5)  # shrink to make this go faster
+            #adjusted_gamma = find_gamma_for_colorized(shrunk, gamma, gamma_weight, 0.5, 1.25, 3.75)
+            #brighten_for_color = brighten(enhanced_rot, adjusted_gamma, gamma_weight)
+            brighten_for_color = brighten(enhanced_rot, gamma, gamma_weight)
+            enhance8 = colorize8_rgb(brighten_for_color, rgb_weights[0], rgb_weights[1], rgb_weights[2])
+        else:
+            brightened_for_gray = brighten(enhanced_rot, gamma, gamma_weight)
+            enhance8 = colorize8_rgb(brightened_for_gray, 1, 1, 1)
+
+        update_image(window, swap_rb(zoom_image(enhance8, zoom)))
 
     # split updating the image into cheap and expensive parts, to allow faster refresh
     def update():
@@ -1006,15 +1031,25 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
               [sg.Text('Rotation', size=(12, 1)),
                sg.Slider(range=(0.0, 360.0), resolution=0.1, default_value=rotation, expand_x=True, enable_events=True,
                          orientation='h', key='-ROTATION-')],
-              [sg.Checkbox('Horizontal Flip', default=h_flip, enable_events=True, key='-HFLIP-')],
-              [sg.Checkbox('Vertical Flip', default=v_flip, enable_events=True, key='-VFLIP-')],
+              [sg.Checkbox('Horizontal Flip', default=h_flip, enable_events=True, key='-HFLIP-'),
+               sg.Checkbox('Vertical Flip', default=v_flip, enable_events=True, key='-VFLIP-')],
+              [sg.Text('Colorize Red', size=(12, 1)),
+               sg.Slider(range=(0.0,6.0), resolution=0.05, default_value=rgb_weights[0], expand_x=True,
+                         enable_events=True, orientation='h', key='-RED-')],
+              [sg.Text('Colorize Green', size=(12, 1)),
+               sg.Slider(range=(0.0,6.0), resolution=0.05, default_value=rgb_weights[1], expand_x=True,
+                         enable_events=True, orientation='h', key='-GREEN-')],
+              [sg.Text('Colorize Blue', size=(12, 1)),
+               sg.Slider(range=(0.0,6.0), resolution=0.05, default_value=rgb_weights[2], expand_x=True,
+                         enable_events=True, orientation='h', key='-BLUE-')],
               [sg.HorizontalSeparator()],
               [sg.Text('Zoom', size=(12, 1)),
-               sg.Slider(range=(10, 100), resolution=1, default_value=zoom, expand_x=True, enable_events=True,
+               sg.Slider(range=(10, 300), resolution=1, default_value=zoom, expand_x=True, enable_events=True,
                          orientation='h', key='-ZOOM-')]]
     window = make_image_window((500, 500), layout)
     update()
-    callbacks = {'-ENHANCE-': on_enhance_change, '-CROP-': on_crop_change,
+    callbacks = {'-RED-': on_change_red, '-GREEN-': on_change_green, '-BLUE-': on_change_blue,
+                 '-ENHANCE-': on_enhance_change, '-CROP-': on_crop_change,
                  '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
                  '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip,
                  '-CROPRADIUS-': on_change_radius,
@@ -1028,7 +1063,7 @@ def interactive_adjust(filename, src, should_enhance, min_adj, max_adj, gamma, g
             callbacks[event](values[event])
     window.close()
 
-    return should_enhance, min_adj, max_adj, gamma, gamma_weight, min_clip, should_crop, crop_radius, h_flip, v_flip, rotation
+    return should_enhance, min_adj, max_adj, gamma, gamma_weight, min_clip, should_crop, crop_radius, h_flip, v_flip, rotation, rgb_weights
 
 
 #
@@ -1093,10 +1128,27 @@ def align_image(im, date, silent):
 
     return flipped, angle
 
+# TODO decide if I want to try to adjust gamma for colorization, probably not
+# def find_gamma_for_colorized(im, gamma, weight, r_weight, g_weight, b_weight):
+#     goal = np.mean(brighten(im, gamma, weight))
+#     lo, hi = 0, 1
+#     adjusted_gamma = gamma
+#     while hi-lo > 0.01:
+#         adjusted_gamma = (lo+hi)*0.5
+#         b = brighten(im, adjusted_gamma, weight)
+#         c = colorize_float_bgr(b, r_weight, g_weight, b_weight)
+#         g = cv.cvtColor(c, cv.COLOR_BGR2GRAY)
+#         a = np.mean(g)
+#         if a > goal:
+#             lo = adjusted_gamma
+#         else:
+#             hi = adjusted_gamma
+#     return adjusted_gamma
+
 
 # Process a single image, with optional verbose output.
 def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gamma_weight, should_crop, crop_radius, min_clip, h_flip, v_flip,
-                  rotation, interact, fn, silent):
+                  rotation, interact, fn, silent, rgb_weights):
     if h_flip or v_flip:
         src = flip_image(src, h_flip, v_flip)
 
@@ -1135,26 +1187,32 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
         enhanced = cnrgf_enhance(src, src_center, 6, min_recip, max_recip, min_clip, None, None, fn) if should_enhance else src
 
     # brighten and colorize
+    orig_enhanced = enhanced
     if brighten_gamma != 1.0:
-        enhanced = brighten(enhanced, brighten_gamma, gamma_weight)
-    enhance8 = colorize8_rgb(enhanced, 0.5, 1.25, 3.75)
-    enhance16 = colorize16_bgr(enhanced, 0.5, 1.25, 3.75)
+        grayscale_result = brighten(enhanced, brighten_gamma, gamma_weight)
+
+    #shrunk = shrink(orig_enhanced, 5)  # shrink to make this go faster
+    #adjusted_gamma = find_gamma_for_colorized(shrunk, brighten_gamma, gamma_weight, 0.5, 1.25, 3.75)
+    #brighten_for_color = brighten(orig_enhanced, adjusted_gamma, gamma_weight)
+    brighten_for_color = brighten(orig_enhanced, brighten_gamma, gamma_weight)
+    color16_result = colorize16_bgr(brighten_for_color, rgb_weights[0], rgb_weights[1], rgb_weights[2])
 
     if not silent and not interact:
         print("Displaying grayscale enhanced result:", flush=True)
-        show_float01(enhanced)
-        download_button(float01_to_16bit(enhanced), fn, "enhancedgraybright")
+        show_float01(grayscale_result)
+        download_button(float01_to_16bit(grayscale_result), fn, "enhancedgraybright")
 
         print("Displaying colorized enhanced result:", flush=True)
+        enhance8 = colorize8_rgb(enhanced, 0.5, 1.25, 3.75)
         show_rgb(enhance8)
-        download_button(enhance16, fn, "enhancedcolor")
-    return enhance16
+        download_button(color16_result, fn, "enhancedcolor")
+    return float01_to_16bit(grayscale_result), color16_result
 
 
 # Process a single image - from filename or URL
 def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, should_enhance, min_contrast_adjust,
                max_contrast_adjust,
-               brighten_gamma, gamma_weight, should_crop, crop_radius, dark_clip, rotation, interact):
+               brighten_gamma, gamma_weight, should_crop, crop_radius, dark_clip, rotation, interact, rgb_weights):
     src, filename = fetch_image(filename_or_url)
 
     if should_align:
@@ -1164,23 +1222,24 @@ def image_main(filename_or_url, silent, h_flip, v_flip, should_align, date, shou
     if not IN_COLAB and interact:
         params = interactive_adjust(filename, src, should_enhance, min_contrast_adjust, max_contrast_adjust,
                                     brighten_gamma,
-                                    gamma_weight, dark_clip, should_crop, crop_radius, h_flip, v_flip, rotation)
+                                    gamma_weight, dark_clip, should_crop, crop_radius, h_flip, v_flip, rotation, rgb_weights)
         if params is None:
             return None
         (should_enhance, min_recip, max_recip, brighten_gamma, gamma_weight, min_clip, should_crop, crop_radius, h_flip, v_flip,
-         rotation) = params
+         rotation, rgb_weights) = params
         print("\nCommand line equivalent to adjusted parameters:")
         hv = ("h" if h_flip else "") + ("v" if v_flip else "")
         flip = " --flip " + hv if h_flip or v_flip else ""
         enhance_val = str(min_recip) + ', ' + str(max_recip) if should_enhance else 'no'
+        crop_val = str(crop_radius) if should_crop else 'no'
         print(
-            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {enhance_val} --crop {crop_radius}{flip} --rotate {rotation} --darkclip {min_clip}\n",
+            f"    SolarFinish --brighten {brighten_gamma} --brightenweight {gamma_weight} --enhance {enhance_val} --crop {crop_val}{flip} --rotate {rotation} --darkclip {min_clip} --colorize {rgb_weights[0]},{rgb_weights[1]},{rgb_weights[2]}\n",
             flush=True)
 
-    enhance16 = process_image(src, should_enhance, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
-                              gamma_weight, should_crop, crop_radius, dark_clip, h_flip, v_flip, rotation, interact, filename, silent)
+    gray16_result, color16_result = process_image(src, should_enhance, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
+                              gamma_weight, should_crop, crop_radius, dark_clip, h_flip, v_flip, rotation, interact, filename, silent, rgb_weights)
 
-    return enhance16, filename
+    return gray16_result, color16_result, filename
 
 
 def popup_get_file(save_as, folder, default):
@@ -1214,6 +1273,7 @@ def process_args():
     parser.add_argument('-d', '--darkclip', type=float, default=0.015,
                         help='clip minimum after contrast enhancement and before normalization')
     parser.add_argument('-i', '--interact', default=False, action='store_true', help='interactively adjust parameters')
+    parser.add_argument('-k', '--colorize', type=str, default='0.5, 1.25, 3.75', help='R,G,B weights for colorization')
     # parser.add_argument('-x', '--imagealign', type=str, nargs='?', help='file or URL for image to use for alignment')
     parser.add_argument('filename', nargs='?', type=str, help='Image file to process')
 
@@ -1250,13 +1310,16 @@ def process_args():
     else:
         output = args.output
 
+    rgb_weights = [float(f) for f in args.colorize.split(",")]
+    if len(rgb_weights) != 3:
+        rgb_weights = [float(f) for f in args.colorize.default.split(",")]
     should_enhance = args.enhance.lower()[0:2] != 'no'
     min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")] if should_enhance else [1, 1]
     h_flip = 'h' in args.flip
     v_flip = 'v' in args.flip
     should_crop = args.crop.lower()[0:2] != 'no'
     crop = float(args.crop) if should_crop else 1.4
-    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop, args.rotate, args.darkclip, args.interact  # , args.imagealign
+    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop, args.rotate, args.darkclip, args.interact, rgb_weights  # , args.imagealign
 
 
 def main():
@@ -1284,6 +1347,7 @@ continue to evolve, and don't expect much tech support.
     fallback_url = 'https://www.cloudynights.com/uploads/gallery/album_24182/gallery_79290_24182_1973021.png'
     should_enhance = True
     should_crop = True
+    rgb_weights = [0.5, 1.25, 3.75]
 
     # get the solar disk image
     if IN_COLAB:
@@ -1292,7 +1356,7 @@ continue to evolve, and don't expect much tech support.
         print("Upload full disk solar image now, or click cancel to use default test image")
         fn_list[0] = url_to_use if should_use_url else upload_file()
     else:
-        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop_radius, rotation, dark_clip, interact = process_args()
+        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop_radius, rotation, dark_clip, interact, rgb_weights = process_args()
 
     suffix = f"minc_{str(min_contrast_adjust)}_maxc_{str(max_contrast_adjust)}_g{str(brighten_gamma)}" if append else ""
     if gong_align_date != "":
@@ -1309,12 +1373,12 @@ continue to evolve, and don't expect much tech support.
         full_name = fn if is_url(fn) else directory + '/' + fn
         result = image_main(full_name, silent, h_flip, v_flip, should_align_first, date_if_aligning,
                             should_enhance, min_contrast_adjust, max_contrast_adjust, brighten_gamma, gamma_weight,
-                            should_crop, crop_radius, dark_clip, rotation, interact)
+                            should_crop, crop_radius, dark_clip, rotation, interact, rgb_weights)
         if result is not None and not IN_COLAB:
-            enhance16, out_fn = result
+            gray16_result, color16_result, out_fn = result
             out_fn = output_directory + '/' + os.path.basename(out_fn)  # replace input dir without output dir
-            write_image(enhance16, out_fn, "enhancedcolor" + suffix)
-            write_image(cv.cvtColor(enhance16, cv.COLOR_BGR2GRAY), out_fn, "enhancedgray" + suffix)
+            write_image(color16_result, out_fn, "enhancedcolor" + suffix)
+            write_image(gray16_result, out_fn, "enhancedgray" + suffix)
             cv.destroyAllWindows()
 
 
