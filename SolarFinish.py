@@ -1,29 +1,7 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.13.1"
+__version__ = "0.13.2"
 
-# Version 0.12 - Added flip checkboxes to interactive, switched to pysimplegui
-# Version 0.11 - Added more command line args, for all parameters. Also expanded
-#                interactive mode with more sliders.
-# Version 0.10 - Fixed some bugs in command line args
-# Version 0.09 - Added batch mode and command line args from kraegar
-# Version 0.08 - Refactored main() to better incorporate batch mode ability
-# Version 0.07 - Added ability to auto-align with GONG image, given a date. Also
-#                added checkbox to load from URL.
-# Version 0.06 - Better circle finding for large images, and for GONG images with
-#                extra halo clipped by image boundary
-# Version 0.05 - Added interactive adjustment when running locally.
-# Version 0.04 - Same python can be run in both colab and local command line. Also
-#                adjusted colorization gamma values to better match grayscale
-# Version 0.03 - Expand instead of crop before processing to minimize banding, then
-#                crop at then end
-# Version 0.02 - More code cleanup and commenting, plus fixed 8-bit inputs
-# Version 0.01 - Switched from median to mean, simplifies things and speeds up
-#                processing without noticeable artifacts. Also, generally cleaned
-#                up the script.
-
-# TODOS        - cleanup of functions responsible for main flow, moving towards a chain
-#                of optional filter tools.
-#              - clarify silent, interact, verbose modes
+# TODOS        - clarify silent, interact, verbose modes
 #              - possibly add invert option - can just take 1- final grayscale
 #              - breakup/cleanup into multiple files (might mean abandoning Colab?)
 #              - more attention to removing artifacts/noise beyond limb
