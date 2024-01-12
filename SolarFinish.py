@@ -1,5 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.13.2"
+__version__ = "0.13.3"
 
 # TODOS        - clarify silent, interact, verbose modes
 #              - possibly add invert option - can just take 1- final grayscale
