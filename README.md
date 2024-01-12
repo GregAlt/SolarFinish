@@ -31,25 +31,34 @@ As an example, if you run this and cancel the file open dialog to use the sample
 Here's the result:
 ![result output image](examples/2023-09-09-Lunt50DS-enhancedcolor.png)
 
+This will run in interactive mode starting with all modifications except colorization disabled:
+```
+   SolarFinish --interact --brighten 1.0 --enhance no --crop no --darkclip 0
+```
+
 ## Interactive Mode
-When running in interactive mode with the --interact or -i command line arguments, you're presented with sliders that change the different parameters, showing the result in realtime. When you are finished, and hit a key in the window, it exits, writing out the result grayscale and colorized images, and displaying the command line parameters corresponding to your parameter choices. The GUI is crude, but functional. Here's an explanation for the sliders:
-- **Min/Max Adjust**: these control how much contrast enhancement is applied. Min controls how much contrast is exaggerated in areas that already have high contrast, and Max controls contrast enhancement in areas that begin with low contrast. Min should be less than max, and the smaller the value, the less enhancement.
--  **Gamma** controls brightening after the contrast enhancement. Lower is brighter, higher is darker.
--  **Gamma Weight** shifts the gamma curve. 1 means a simple gamma curve where the bulk of the brightening is on darker pixels -- this can be a problem because it emphasizes background glow and noise beyond the solar limb. 0 means shift emphasis to brighter pixels, generally in solar disk. In the middle blends between the two. It helps to use Quadrant to zoom in on prominences when adjusting this to see the subtle effect.
--  **Dark Clip** controls the level at which pixels are clipped to black. This should stay very low, as raising too high will eat away at the faint fringes of prominences. Too low, though, and you might see too much background glow and noise.
--  **Crop Radius** controls the size of the final image crop
--  **Rotation** controls the rotation of the image, to let you manually align
+When running in interactive mode with the --interact or -i command line arguments, you're presented with sliders that change the different parameters, showing the result in realtime. When you are finished, and hit a key in the window, it exits, writing out the result grayscale and colorized images, and displaying the command line parameters corresponding to your parameter choices. The GUI is crude, but functional. Here's an explanation for the sliders and checkboxes:
+- **Contrast Enhance (CNRGF)** toggles whether or not to apply contrast enhancement
+- **Min/Max Adjust** these control how much contrast enhancement is applied. Min controls how much contrast is exaggerated in areas that already have high contrast, and Max controls contrast enhancement in areas that begin with low contrast. Min should be less than max, and the smaller the value, the less enhancement.
+- **Gamma** controls brightening after the contrast enhancement. Lower is brighter, higher is darker.
+- **Gamma Weight** shifts the gamma curve. 1 means a simple gamma curve where the bulk of the brightening is on darker pixels -- this can be a problem because it emphasizes background glow and noise beyond the solar limb. 0 means shift emphasis to brighter pixels, generally in solar disk. In the middle blends between the two. It helps to use Quadrant to zoom in on prominences when adjusting this to see the subtle effect.
+- **Dark Clip** controls the level at which pixels are clipped to black. This should stay very low, as raising too high will eat away at the faint fringes of prominences. Too low, though, and you might see too much background glow and noise.
+- **Center and Crop** toggles whether or not image is centered and expanded/cropped
+- **Crop Radius** controls the size of the final image crop
+- **Rotation** controls the rotation of the image, to let you manually align
+- **Horizontal/Vertical Flip** flips the image horizontally or vertically or both
 
 And view controls that have no effect on the generated image:
--  **Zoom** lets you zoom out to see full disk even for large image sizes
+- **Show Colorized**: toggles between grayscale and colorized view
+- **Zoom** lets you zoom out to see full disk even for large image sizes
 
 More details:
 ```
-usage: SolarFinish.py [-h] [-t TYPE] [-p PATTERN] [-o [OUTPUT]] [-s] [-a]
-                      [-f {h,v,hv}] [-g GONGALIGN] [-b BRIGHTEN]
-                      [-w BRIGHTENWEIGHT] [-e ENHANCE] [-c CROP] [-r ROTATE]
-                      [-d DARKCLIP] [-i]
-                      [filename]
+usage: SolarFinish.exe [-h] [-v] [-t TYPE] [-p PATTERN] [-o [OUTPUT]] [-s]
+                       [-a] [-f {h,v,hv}] [-g GONGALIGN] [-b BRIGHTEN]
+                       [-w BRIGHTENWEIGHT] [-e ENHANCE] [-c CROP] [-r ROTATE]
+                       [-d DARKCLIP] [-i]
+                       [filename]
 
 Process solar images
 
@@ -58,6 +67,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
+  -v, --version         show program's version number and exit
   -t TYPE, --type TYPE  filetype to go along with -d, defaults to tif
   -p PATTERN, --pattern PATTERN
                         String pattern to match for -d
@@ -78,9 +88,9 @@ options:
                         weight to shift gamma brightening, 1 = use gamma
                         curve, 0 = less brightening of darker pixels
   -e ENHANCE, --enhance ENHANCE
-                        contrast enhance min,max. 1 = no enhance, 5 = probably
-                        too much
-  -c CROP, --crop CROP  final crop radius in solar radii
+                        contrast enhance min,max or no. 1 = no enhance, 5 =
+                        probably too much.
+  -c CROP, --crop CROP  final crop radius in solar radii. Or no
   -r ROTATE, --rotate ROTATE
                         rotation in degrees
   -d DARKCLIP, --darkclip DARKCLIP
