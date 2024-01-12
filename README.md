@@ -48,6 +48,7 @@ When running in interactive mode with the --interact or -i command line argument
 - **Rotation** controls the rotation of the image, to let you manually align
 - **Horizontal/Vertical Flip** flips the image horizontally or vertically or both
 - **Colorize Red/Green/Blue** adjust gamma curves for each color. Smaller is brighter
+- **Align Date / Align** set the date of your capture, then hit Align. It takes a minute, so be patient. At the end, the rotation and flip settings should be the best match for the GONG capture at that date. (https://halpha.nso.edu/)
 
 And view controls that have no effect on the generated image:
 - **Show Colorized**: toggles between grayscale and colorized view
