@@ -47,6 +47,7 @@ When running in interactive mode with the --interact or -i command line argument
 - **Crop Radius** controls the size of the final image crop
 - **Rotation** controls the rotation of the image, to let you manually align
 - **Horizontal/Vertical Flip** flips the image horizontally or vertically or both
+- **Colorize Red/Green/Blue** adjust gamma curves for each color. Smaller is brighter
 
 And view controls that have no effect on the generated image:
 - **Show Colorized**: toggles between grayscale and colorized view
@@ -57,7 +58,7 @@ More details:
 usage: SolarFinish.exe [-h] [-v] [-t TYPE] [-p PATTERN] [-o [OUTPUT]] [-s]
                        [-a] [-f {h,v,hv}] [-g GONGALIGN] [-b BRIGHTEN]
                        [-w BRIGHTENWEIGHT] [-e ENHANCE] [-c CROP] [-r ROTATE]
-                       [-d DARKCLIP] [-i]
+                       [-d DARKCLIP] [-i] [-k COLORIZE]
                        [filename]
 
 Process solar images
@@ -97,4 +98,6 @@ options:
                         clip minimum after contrast enhancement and before
                         normalization
   -i, --interact        interactively adjust parameters
+  -k COLORIZE, --colorize COLORIZE
+                        R,G,B weights for colorization
 ```
