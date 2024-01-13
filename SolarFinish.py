@@ -876,13 +876,17 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
                        gamma, gamma_weight, min_clip, should_crop, crop_radius, h_flip, v_flip, rotation,
                        show_colorized, rgb_weights, align_date, should_align):
     def on_change_min(val):
-        nonlocal min_adj
+        nonlocal min_adj, max_adj
         min_adj = val
+        max_adj = max(max_adj, val)
+        window['-MAXADJUST-'].update(max_adj)
         update()
 
     def on_change_max(val):
-        nonlocal max_adj
+        nonlocal min_adj, max_adj
         max_adj = val
+        min_adj = min(min_adj, val)
+        window['-MINADJUST-'].update(min_adj)
         update()
 
     def on_change_gamma(val):
