@@ -986,7 +986,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         return sg.Window('SolarFinish ', [[image_col, sg.Column(controls)]], resizable=True, finalize=True)
 
     def update_image(win, im):
-        win['-IMAGE-'].update(size=(im.shape[1], im.shape[0]), data=cv.imencode('.png', im)[1].tobytes())
+        win['-IMAGE-'].update(size=(im.shape[1], im.shape[0]), data=cv.imencode('.ppm', im)[1].tobytes())
         win.refresh()
         win['-SCROLLABLE-'].contents_changed()
 
