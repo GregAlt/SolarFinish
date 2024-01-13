@@ -1222,7 +1222,7 @@ def align_image(im, date, silent):
     date = date.replace('-', '/')
     best = find_best_alignment(im, date, silent)
     percent, angle, flipped, sim, gong_big, gong, input_big, inp = best
-
+    angle %= 360.0
     if not silent:
         print(f"Displaying GONG image used for alignment:", flush=True)
         show_float01(gong)
