@@ -867,8 +867,9 @@ def cnrgf_enhance(src, src_center, n, min_recip, max_recip, min_clip, show_inter
 # Interactive
 
 # Drive interactive adjustment and visualization of parameters with sliders, return final params selected
-def interactive_adjust(filename_or_url, output_directory, suffix, silent, should_enhance, min_adj, max_adj, gamma, gamma_weight, min_clip, should_crop,
-                       crop_radius, h_flip, v_flip, rotation, rgb_weights, align_date, should_align):
+def interactive_adjust(filename_or_url, output_directory, suffix, silent, should_enhance, min_adj, max_adj, gamma,
+                       gamma_weight, min_clip, should_crop, crop_radius, h_flip, v_flip, rotation, rgb_weights,
+                       align_date, should_align):
     def on_change_min(val):
         nonlocal min_adj
         min_adj = val
@@ -997,25 +998,45 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
 
         update_image(window, swap_rb(zoom_image(enhance8, zoom)))
 
+    def make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius, should_crop, h_flip, v_flip, rotation, min_clip, rgb_weights):
+        hv = ("h" if h_flip else "") + ("v" if v_flip else "")
+        flip = " --flip " + hv if h_flip or v_flip else ""
+        enhance_val = str(min_adj) + ',' + str(max_adj) if should_enhance else 'no'
+        crop_val = str(crop_radius) if should_crop else 'no'
+        return f"--brighten {gamma} --brightenweight {gamma_weight} --enhance {enhance_val} --crop {crop_val}{flip} --rotate {rotation} --darkclip {min_clip} --colorize {rgb_weights[0]},{rgb_weights[1]},{rgb_weights[2]}"
+
+    def write_result(gray16_result, color16_result, output_directory, filename, suffix):
+        out_fn = output_directory + '/' + os.path.basename(filename)  # replace input dir without output dir
+        write_image(color16_result, out_fn, "enhancedcolor" + suffix)
+        write_image(gray16_result, out_fn, "enhancedgray" + suffix)
+
+
     # split updating the image into cheap and expensive parts, to allow faster refresh
     def update():
         update_enhance()
         update_post_enhance()
 
-    src16_unflipped, filename = fetch_image(filename_or_url)
+    def load_image(filename_or_url):
+        src16_unflipped, filename = fetch_image(filename_or_url)
 
-    # find the solar disk circle
-    (is_valid, src_center, radius) = find_valid_circle(src16_unflipped)
-    if not is_valid:
-        print("Error: Couldn't find valid circle for input solar disk!", flush=True)
+        # find the solar disk circle
+        (is_valid, src_center, radius) = find_valid_circle(src16_unflipped)
+        if not is_valid:
+            print("Error: Couldn't find valid circle for input solar disk!", flush=True)
+            return None
+
+        src = to_float01_from_16bit(src16_unflipped)
+        src = flip_image(src, h_flip, v_flip)
+        src_center = flip_center(src_center, src, h_flip, v_flip)
+        return is_valid, filename, src16_unflipped, src, src_center, radius
+
+    result = load_image(filename_or_url)
+    if result is None:
         return None
+    is_valid, filename, src16_unflipped, src, src_center, radius = result
 
     if not should_align:
         date = datetime.datetime.today().strftime('%Y-%m-%d')
-
-    src = to_float01_from_16bit(src16_unflipped)
-    src = flip_image(src, h_flip, v_flip)
-    src_center = flip_center(src_center, src, h_flip, v_flip)
 
     rotation %= 360.0
     enhanced = np.zeros(0)
@@ -1087,15 +1108,10 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
             callbacks[event](values[event])
     window.close()
 
-    #todo: process_image, display command line args, then write_image
+    # todo: process_image, display command line args, then write_image
+    command_line = make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius, should_crop, h_flip, v_flip, rotation, min_clip, rgb_weights)
     print("\nCommand line equivalent to adjusted parameters:")
-    hv = ("h" if h_flip else "") + ("v" if v_flip else "")
-    flip = " --flip " + hv if h_flip or v_flip else ""
-    enhance_val = str(min_adj) + ',' + str(max_adj) if should_enhance else 'no'
-    crop_val = str(crop_radius) if should_crop else 'no'
-    print(
-        f"    SolarFinish --brighten {gamma} --brightenweight {gamma_weight} --enhance {enhance_val} --crop {crop_val}{flip} --rotate {rotation} --darkclip {min_clip} --colorize {rgb_weights[0]},{rgb_weights[1]},{rgb_weights[2]}\n",
-        flush=True)
+    print(f"    SolarFinish {command_line}\n", flush=True)
 
     result = process_image(src16_unflipped, should_enhance, min_adj, max_adj, gamma, gamma_weight,
                            should_crop, crop_radius, min_clip, h_flip, v_flip, rotation, False, filename, True,
@@ -1103,9 +1119,7 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
 
     if result is not None:
         gray16_result, color16_result = result
-        out_fn = output_directory + '/' + os.path.basename(filename)  # replace input dir without output dir
-        write_image(color16_result, out_fn, "enhancedcolor" + suffix)
-        write_image(gray16_result, out_fn, "enhancedgray" + suffix)
+        write_result(gray16_result, color16_result, output_directory, filename, suffix)
         cv.destroyAllWindows()
     exit(0)
 
@@ -1382,11 +1396,10 @@ continue to evolve, and don't expect much tech support.
         interact = False
     elif interact and not IN_COLAB:
         full_name = fn_list[0] if is_url(fn_list[0]) else directory + '/' + fn_list[0]
-        interactive_adjust(full_name, output_directory, suffix, silent, should_enhance, min_contrast_adjust, max_contrast_adjust,
-                                    brighten_gamma, gamma_weight, dark_clip, should_crop, crop_radius, h_flip, v_flip,
-                                    rotation, rgb_weights, gong_align_date, should_align_first)
+        interactive_adjust(full_name, output_directory, suffix, silent, should_enhance, min_contrast_adjust,
+                           max_contrast_adjust, brighten_gamma, gamma_weight, dark_clip, should_crop,
+                           crop_radius, h_flip, v_flip, rotation, rgb_weights, gong_align_date, should_align_first)
         exit(0)
-
 
     for fn in fn_list:
         full_name = fn if is_url(fn) else directory + '/' + fn
