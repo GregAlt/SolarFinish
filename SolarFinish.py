@@ -725,8 +725,11 @@ def make_filename_for_write(fn, suffix):
 # Write png image to disk with given suffix
 def write_image(im, fn, suffix):
     out_fn = make_filename_for_write(fn, suffix)
-    print(f"writing: {out_fn}")
-    cv.imwrite(out_fn, im)
+    print(f"writing: {out_fn}", flush=True)
+    try:
+        cv.imwrite(out_fn, im)
+    except Exception as error:
+        print(f"Error: Failed to save {out_fn}, likely bad file extension. Try .PNG\n{error}", flush=True)
     return out_fn
 
 
@@ -1049,8 +1052,12 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         out_fn = make_filename_for_write(fn, suffix)
         out_fn = popup_get_file(True, output_directory, out_fn)
         if out_fn != '':
-            print(f"writing: {out_fn}")
-            cv.imwrite(out_fn, im)
+            print(f"writing: {out_fn}", flush=True)
+            try:
+                cv.imwrite(out_fn, im)
+            except Exception as error:
+                print(f"Error: Failed to save {out_fn}, likely bad file extension. Try .PNG\n{error}", flush=True)
+
 
     def load():
         nonlocal is_valid, filename, src16_unflipped, src, src_center, radius
@@ -1064,7 +1071,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     def save():
         command_line = make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius,
                                                 should_crop, h_flip, v_flip, rotation, min_clip, show_colorized, rgb_weights)
-        print("\nCommand line equivalent to adjusted parameters:")
+        print("\nCommand line equivalent to adjusted parameters:", flush=True)
         print(f"    SolarFinish {command_line}\n", flush=True)
 
         result_ims = process_image(src16_unflipped, should_enhance, min_adj, max_adj, gamma, gamma_weight, should_crop,
@@ -1136,6 +1143,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
     result = load_image(filename_or_url)
     if result is None:
+        print(f"Error: Failed to load {filename_or_url}", flush=True)
         sys.exit(0)
     is_valid, filename, src16_unflipped, src, src_center, radius = result
     update()
@@ -1367,7 +1375,7 @@ def process_args():
         if os.path.isfile(fn):
             directory = os.path.dirname(fn)
             fn_list = [os.path.basename(fn)]
-            print(f"Selected image: {fn}")
+            print(f"Selected image: {fn}", flush=True)
 
     if len(fn_list) == 0 or fn_list[0] == "":
         fn_list = [""]
