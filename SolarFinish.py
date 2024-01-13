@@ -714,11 +714,16 @@ def upload_file():
     return keys[0] if keys else ""
 
 
-# Write png image to disk with given suffix
-def write_image(im, fn, suffix):
+def make_filename_for_write(fn, suffix):
     # strip full path after the last .
     without_extension = fn[::-1].split('.', 1)[1][::-1]  # reverse, split first ., take 2nd part, reverse again
     out_fn = without_extension + '-' + suffix + '.png'
+    return out_fn
+
+
+# Write png image to disk with given suffix
+def write_image(im, fn, suffix):
+    out_fn = make_filename_for_write(fn, suffix)
     print(f"writing: {out_fn}")
     cv.imwrite(out_fn, im)
     return out_fn
@@ -867,9 +872,9 @@ def cnrgf_enhance(src, src_center, n, min_recip, max_recip, min_clip, show_inter
 # Interactive
 
 # Drive interactive adjustment and visualization of parameters with sliders, return final params selected
-def interactive_adjust(filename_or_url, output_directory, suffix, silent, should_enhance, min_adj, max_adj, gamma,
-                       gamma_weight, min_clip, should_crop, crop_radius, h_flip, v_flip, rotation, rgb_weights,
-                       align_date, should_align):
+def interactive_adjust(filename_or_url, directory, output_directory, suffix, silent, should_enhance, min_adj, max_adj,
+                       gamma, gamma_weight, min_clip, should_crop, crop_radius, h_flip, v_flip, rotation,
+                       show_colorized, rgb_weights, align_date, should_align):
     def on_change_min(val):
         nonlocal min_adj
         min_adj = val
@@ -974,7 +979,7 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
     def make_image_window(win_size, controls):
         image_col = sg.Column([[sg.Image(key='-IMAGE-')]], size=win_size, expand_x=True, expand_y=True, scrollable=True,
                               key='-SCROLLABLE-')
-        return sg.Window('SolarFinish ' + filename, [[image_col, sg.Column(controls)]], resizable=True, finalize=True)
+        return sg.Window('SolarFinish ', [[image_col, sg.Column(controls)]], resizable=True, finalize=True)
 
     def update_image(win, im):
         win['-IMAGE-'].update(size=(im.shape[1], im.shape[0]), data=cv.imencode('.png', im)[1].tobytes())
@@ -998,12 +1003,13 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
 
         update_image(window, swap_rb(zoom_image(enhance8, zoom)))
 
-    def make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius, should_crop, h_flip, v_flip, rotation, min_clip, rgb_weights):
+    def make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius, should_crop, h_flip, v_flip, rotation, min_clip, show_colorized, rgb_weights):
         hv = ("h" if h_flip else "") + ("v" if v_flip else "")
         flip = " --flip " + hv if h_flip or v_flip else ""
         enhance_val = str(min_adj) + ',' + str(max_adj) if should_enhance else 'no'
         crop_val = str(crop_radius) if should_crop else 'no'
-        return f"--brighten {gamma} --brightenweight {gamma_weight} --enhance {enhance_val} --crop {crop_val}{flip} --rotate {rotation} --darkclip {min_clip} --colorize {rgb_weights[0]},{rgb_weights[1]},{rgb_weights[2]}"
+        colorize_val = f"{rgb_weights[0]},{rgb_weights[1]},{rgb_weights[2]}" if show_colorized else 'no'
+        return f"--brighten {gamma} --brightenweight {gamma_weight} --enhance {enhance_val} --crop {crop_val}{flip} --rotate {rotation} --darkclip {min_clip} --colorize {colorize_val}"
 
     def write_result(gray16_result, color16_result, output_directory, filename, suffix):
         out_fn = output_directory + '/' + os.path.basename(filename)  # replace input dir without output dir
@@ -1025,27 +1031,55 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
             print("Error: Couldn't find valid circle for input solar disk!", flush=True)
             return None
 
+        window.set_title('SolarFinish ' + filename_or_url)
         src = to_float01_from_16bit(src16_unflipped)
         src = flip_image(src, h_flip, v_flip)
         src_center = flip_center(src_center, src, h_flip, v_flip)
         return is_valid, filename, src16_unflipped, src, src_center, radius
 
-    result = load_image(filename_or_url)
-    if result is None:
-        return None
-    is_valid, filename, src16_unflipped, src, src_center, radius = result
+    def save_as_image(im, fn, suffix):
+        out_fn = make_filename_for_write(fn, suffix)
+        out_fn = popup_get_file(True, output_directory, out_fn)
+        if out_fn != '':
+            print(f"writing: {out_fn}")
+            cv.imwrite(out_fn, im)
 
-    if not should_align:
-        date = datetime.datetime.today().strftime('%Y-%m-%d')
+    def load():
+        nonlocal is_valid, filename, src16_unflipped, src, src_center, radius
+        fn = popup_get_file(False, directory, "")
+        print(f"loading: {fn}", flush=True)
+        result = load_image(fn)
+        if result is not None:
+            is_valid, filename, src16_unflipped, src, src_center, radius = result
+            update()
+
+    def save():
+        command_line = make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius,
+                                                should_crop, h_flip, v_flip, rotation, min_clip, show_colorized, rgb_weights)
+        print("\nCommand line equivalent to adjusted parameters:")
+        print(f"    SolarFinish {command_line}\n", flush=True)
+
+        result_ims = process_image(src16_unflipped, should_enhance, min_adj, max_adj, gamma, gamma_weight, should_crop,
+                               crop_radius, min_clip, h_flip, v_flip, rotation, False, filename, True, rgb_weights)
+
+        if result is not None:
+            gray16_result, color16_result = result_ims
+            out_fn = output_directory + '/' + os.path.basename(filename)  # replace input dir without output dir
+            if show_colorized:
+                save_as_image(color16_result, out_fn, "enhancedcolor" + suffix)
+            else:
+                save_as_image(gray16_result, out_fn, "enhancedgray" + suffix)
+            cv.destroyAllWindows()
 
     rotation %= 360.0
     enhanced = np.zeros(0)
-    show_colorized = True
     zoom = 33
-    layout = [[sg.Text('Click when finished adjusting: '),
-               sg.Text('Done', enable_events=True, key='Exit', relief="raised", border_width=5, expand_x=True,
-                       justification='center'),
-               sg.Checkbox('Show Colorized', True, enable_events=True, key='-COLORIZE-')],
+    if not should_align:
+        align_date = datetime.datetime.today().strftime('%Y-%m-%d')
+
+    layout = [[sg.Button('Quit', enable_events=True, key='Exit'),
+               sg.Button('Load', enable_events=True, key='-LOAD-'),
+               sg.Button('Save', enable_events=True, key='-SAVE-')],
               [sg.Checkbox('Contrast Enhance (CNRGF)', should_enhance, enable_events=True, key='-ENHANCE-')],
               [sg.Text('MinAdjust', size=(12, 1)),
                sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=min_adj, expand_x=True, enable_events=True,
@@ -1071,6 +1105,7 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
                          orientation='h', key='-ROTATION-')],
               [sg.Checkbox('Horizontal Flip', default=h_flip, enable_events=True, key='-HFLIP-'),
                sg.Checkbox('Vertical Flip', default=v_flip, enable_events=True, key='-VFLIP-')],
+              [sg.Checkbox('Colorize', default=show_colorized, enable_events=True, key='-COLORIZE-')],
               [sg.Text('Colorize Red', size=(12, 1)),
                sg.Slider(range=(0.0, 6.0), resolution=0.05, default_value=rgb_weights[0], expand_x=True,
                          enable_events=True, orientation='h', key='-RED-')],
@@ -1090,7 +1125,13 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
                          orientation='h', key='-ZOOM-')],
               ]
     window = make_image_window((500, 500), layout)
+
+    result = load_image(filename_or_url)
+    if result is None:
+        exit(0)
+    is_valid, filename, src16_unflipped, src, src_center, radius = result
     update()
+
     callbacks = {'-RED-': on_change_red, '-GREEN-': on_change_green, '-BLUE-': on_change_blue,
                  '-ENHANCE-': on_enhance_change, '-CROP-': on_crop_change,
                  '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
@@ -1104,23 +1145,13 @@ def interactive_adjust(filename_or_url, output_directory, suffix, silent, should
             break
         elif event == '-ALIGN-':
             do_align(values['-DATE-'])
+        elif event == '-SAVE-':
+            save()
+        elif event == '-LOAD-':
+            load()
         elif event in callbacks:
             callbacks[event](values[event])
     window.close()
-
-    # todo: process_image, display command line args, then write_image
-    command_line = make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius, should_crop, h_flip, v_flip, rotation, min_clip, rgb_weights)
-    print("\nCommand line equivalent to adjusted parameters:")
-    print(f"    SolarFinish {command_line}\n", flush=True)
-
-    result = process_image(src16_unflipped, should_enhance, min_adj, max_adj, gamma, gamma_weight,
-                           should_crop, crop_radius, min_clip, h_flip, v_flip, rotation, False, filename, True,
-                           rgb_weights)
-
-    if result is not None:
-        gray16_result, color16_result = result
-        write_result(gray16_result, color16_result, output_directory, filename, suffix)
-        cv.destroyAllWindows()
     exit(0)
 
 
@@ -1300,7 +1331,8 @@ def process_args():
     parser.add_argument('-d', '--darkclip', type=float, default=0.015,
                         help='clip minimum after contrast enhancement and before normalization')
     parser.add_argument('-i', '--interact', default=False, action='store_true', help='interactively adjust parameters')
-    parser.add_argument('-k', '--colorize', type=str, default='0.5, 1.25, 3.75', help='R,G,B weights for colorization')
+    default_colorize = '0.5,1.25,3.75'
+    parser.add_argument('-k', '--colorize', type=str, default=default_colorize, help='R,G,B weights for colorization or no')
     # parser.add_argument('-x', '--imagealign', type=str, nargs='?', help='file or URL for image to use for alignment')
     parser.add_argument('filename', nargs='?', type=str, help='Image file to process')
 
@@ -1337,16 +1369,18 @@ def process_args():
     else:
         output = args.output
 
-    rgb_weights = [float(f) for f in args.colorize.split(",")]
-    if len(rgb_weights) != 3:
-        rgb_weights = [float(f) for f in args.colorize.default.split(",")]
+    should_colorize = args.colorize.lower()[0:2] != 'no'
+    if should_colorize:
+        rgb_weights = [float(f) for f in args.colorize.split(",")]
+    if not should_colorize or len(rgb_weights) != 3:
+        rgb_weights = [float(f) for f in default_colorize.split(",")]
     should_enhance = args.enhance.lower()[0:2] != 'no'
     min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")] if should_enhance else [1, 1]
     h_flip = 'h' in args.flip
     v_flip = 'v' in args.flip
     should_crop = args.crop.lower()[0:2] != 'no'
     crop = float(args.crop) if should_crop else 1.4
-    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop, args.rotate, args.darkclip, args.interact, rgb_weights  # , args.imagealign
+    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop, args.rotate, args.darkclip, args.interact, should_colorize, rgb_weights  # , args.imagealign
 
 
 def main():
@@ -1383,7 +1417,7 @@ continue to evolve, and don't expect much tech support.
         print("Upload full disk solar image now, or click cancel to use default test image")
         fn_list[0] = url_to_use if should_use_url else upload_file()
     else:
-        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop_radius, rotation, dark_clip, interact, rgb_weights = process_args()
+        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop_radius, rotation, dark_clip, interact, should_colorize, rgb_weights = process_args()
 
     suffix = f"minc_{str(min_contrast_adjust)}_maxc_{str(max_contrast_adjust)}_g{str(brighten_gamma)}" if append else ""
     if gong_align_date != "":
@@ -1396,9 +1430,10 @@ continue to evolve, and don't expect much tech support.
         interact = False
     elif interact and not IN_COLAB:
         full_name = fn_list[0] if is_url(fn_list[0]) else directory + '/' + fn_list[0]
-        interactive_adjust(full_name, output_directory, suffix, silent, should_enhance, min_contrast_adjust,
+        interactive_adjust(full_name, directory, output_directory, suffix, silent, should_enhance, min_contrast_adjust,
                            max_contrast_adjust, brighten_gamma, gamma_weight, dark_clip, should_crop,
-                           crop_radius, h_flip, v_flip, rotation, rgb_weights, gong_align_date, should_align_first)
+                           crop_radius, h_flip, v_flip, rotation, should_colorize, rgb_weights, gong_align_date,
+                           should_align_first)
         exit(0)
 
     for fn in fn_list:
@@ -1416,7 +1451,8 @@ continue to evolve, and don't expect much tech support.
         if result is not None and not IN_COLAB:
             gray16_result, color16_result = result
             out_fn = output_directory + '/' + os.path.basename(filename)  # replace input dir without output dir
-            write_image(color16_result, out_fn, "enhancedcolor" + suffix)
+            if should_colorize:
+                write_image(color16_result, out_fn, "enhancedcolor" + suffix)
             write_image(gray16_result, out_fn, "enhancedgray" + suffix)
             cv.destroyAllWindows()
 
