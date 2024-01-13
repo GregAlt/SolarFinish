@@ -1,5 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.13.4"
+__version__ = "0.14.0"
 
 # TODOS        - clarify silent, interact, verbose modes
 #              - possibly add invert option - can just take 1- final grayscale
@@ -34,7 +34,7 @@ import urllib.request
 import astropy.io.fits
 import io
 from contextlib import redirect_stdout
-
+import sys
 
 #
 # Circle finding
@@ -1128,7 +1128,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
     result = load_image(filename_or_url)
     if result is None:
-        exit(0)
+        sys.exit(0)
     is_valid, filename, src16_unflipped, src, src_center, radius = result
     update()
 
@@ -1152,7 +1152,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         elif event in callbacks:
             callbacks[event](values[event])
     window.close()
-    exit(0)
+    sys.exit(0)
 
 
 #
@@ -1434,7 +1434,7 @@ continue to evolve, and don't expect much tech support.
                            max_contrast_adjust, brighten_gamma, gamma_weight, dark_clip, should_crop,
                            crop_radius, h_flip, v_flip, rotation, should_colorize, rgb_weights, gong_align_date,
                            should_align_first)
-        exit(0)
+        sys.exit(0)
 
     for fn in fn_list:
         full_name = fn if is_url(fn) else directory + '/' + fn
