@@ -714,6 +714,7 @@ def upload_file():
     return keys[0] if keys else ""
 
 
+# Construct output filename for output by replacing extension and adding suffix
 def make_filename_for_write(fn, suffix):
     # strip full path after the last .
     without_extension = fn[::-1].split('.', 1)[1][::-1]  # reverse, split first ., take 2nd part, reverse again
@@ -1307,6 +1308,7 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
     return float01_to_16bit(grayscale_result), color16_result
 
 
+# Popup a filepicker - can be for loading or saving. Return filename or ""
 def popup_get_file(save_as, folder, default):
     filename = sg.popup_get_file('', save_as=save_as, no_window=True, initial_folder=folder, default_path=default)
     return filename
