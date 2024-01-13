@@ -1,5 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.14.0"
+__version__ = "0.14.1"
 
 # TODOS        - clarify silent, interact, verbose modes
 #              - possibly add invert option - can just take 1- final grayscale
@@ -892,12 +892,12 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     def on_change_gamma(val):
         nonlocal gamma
         gamma = val
-        update_post_enhance()
+        update_post_rotate()
 
     def on_change_gamma_weight(val):
         nonlocal gamma_weight
         gamma_weight = val
-        update_post_enhance()
+        update_post_rotate()
 
     def on_change_radius(val):
         nonlocal crop_radius
@@ -917,7 +917,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     def on_change_colorize(val):
         nonlocal show_colorized
         show_colorized = val
-        update_post_enhance()
+        update_post_rotate()
 
     def on_enhance_change(val):
         nonlocal should_enhance
@@ -932,19 +932,19 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     def on_change_zoom(val):
         nonlocal zoom
         zoom = val
-        update_post_enhance()
+        update_post_rotate()
 
     def on_change_red(val):
         rgb_weights[0] = val
-        update_post_enhance()
+        update_post_rotate()
 
     def on_change_green(val):
         rgb_weights[1] = val
-        update_post_enhance()
+        update_post_rotate()
 
     def on_change_blue(val):
         rgb_weights[2] = val
-        update_post_enhance()
+        update_post_rotate()
 
     def on_change_horiz_flip(val):
         nonlocal h_flip, src, src_center
@@ -990,11 +990,14 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         win.refresh()
         win['-SCROLLABLE-'].contents_changed()
 
-    # this is the cheap part to update
     def update_post_enhance():
-        nonlocal enhanced
+        nonlocal enhanced_rot
         enhanced_rot = rotate(enhanced, (enhanced.shape[1] // 2, enhanced.shape[0] // 2), rotation)
+        update_post_rotate()
 
+    # this is the cheap part to update
+    def update_post_rotate():
+        nonlocal enhanced_rot
         if show_colorized:
             # shrunk = shrink(enhanced_rot, 5)  # shrink to make this go faster
             # adjusted_gamma = find_gamma_for_colorized(shrunk, gamma, gamma_weight, 0.5, 1.25, 3.75)
@@ -1076,7 +1079,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
             cv.destroyAllWindows()
 
     rotation %= 360.0
-    enhanced = np.zeros(0)
+    enhanced_rot = enhanced = np.zeros(0)
     zoom = 33
     if not should_align:
         align_date = datetime.datetime.today().strftime('%Y-%m-%d')
