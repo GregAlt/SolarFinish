@@ -1,5 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.14.2"
+__version__ = "0.14.3"
 
 # TODOS        - clarify silent, interact, verbose modes
 #              - possibly add invert option - can just take 1- final grayscale
@@ -1092,6 +1092,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     rotation %= 360.0
     enhanced_rot = enhanced = np.zeros(0)
     zoom = 33
+    old_screen_size = old_image_size = None
     if not should_align:
         align_date = datetime.datetime.today().strftime('%Y-%m-%d')
 
@@ -1143,6 +1144,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
                          orientation='h', key='-ZOOM-')],
               ]
     window = make_image_window((500, 500), layout)
+    window.bind('<Configure>', "Resize")
 
     result = load_image(filename_or_url)
     if result is None:
@@ -1168,6 +1170,14 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
             save()
         elif event == '-LOAD-':
             load()
+        elif event == 'Resize':
+            screen_size = window['-SCROLLABLE-'].get_size()
+            image_size = (enhanced_rot.shape[1], enhanced_rot.shape[0])
+            if screen_size != old_screen_size or image_size != old_image_size:
+                old_screen_size, old_image_size = screen_size, image_size
+                zoom = max(10, min(300, int(max(screen_size) / max(image_size) * 100)))
+                window['-ZOOM-'].update(zoom)
+                update_post_rotate()
         elif event in callbacks:
             callbacks[event](values[event])
     window.close()
