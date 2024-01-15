@@ -9,7 +9,6 @@ __version__ = "0.14.2"
 #                would be 4 params for min/max input and min/max output
 #              - better sub-pixel circle finding, and shifting before processing
 #              - how to allow more continuous brightness of filaproms across limb?
-#              - update outdir when loading iff outdir wasn't explicitly set
 
 try:
     import google.colab.files
@@ -1062,11 +1061,12 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
                 print(f"Error: Failed to save {out_fn}, likely bad file extension. Try .PNG\n{error}", flush=True)
 
     def load():
-        nonlocal is_valid, filename, src16_unflipped, src, src_center, radius
+        nonlocal is_valid, filename, src16_unflipped, src, src_center, radius, output_directory
         fn = popup_get_file(False, directory, "")
         print(f"loading: {fn}", flush=True)
         result = load_image(fn)
         if result is not None:
+            output_directory = os.path.dirname(fn)
             is_valid, filename, src16_unflipped, src, src_center, radius = result
             update()
 
