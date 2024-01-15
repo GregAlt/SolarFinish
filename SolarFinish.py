@@ -771,7 +771,6 @@ def get_std_dev_scaler(min_recip, max_recip):
 
 # Helper function for displaying and downloading image
 def display_and_download(im, text, should_download, fn, suffix):
-    print(text, flush=True)
     show_float01(im)
     if should_download:
         download_button(float01_to_16bit(im), fn, suffix)
@@ -1127,7 +1126,6 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         gamma = values['-GAMMA-']
         gamma_weight = values['-GAMMAWEIGHT-']
         min_clip = values['-DARKCLIP-']
-        print(f"{crop_radius!=values['-CROPRADIUS-']}, crop_radius={crop_radius}", flush=True)
         crop_radius = values['-CROPRADIUS-']
         rotation = values['-ROTATION-']
         show_colorized = values['-COLORIZE-']
