@@ -9,6 +9,7 @@ __version__ = "0.14.2"
 #                would be 4 params for min/max input and min/max output
 #              - better sub-pixel circle finding, and shifting before processing
 #              - how to allow more continuous brightness of filaproms across limb?
+#              - update outdir when loading iff outdir wasn't explicitly set
 
 try:
     import google.colab.files
@@ -1014,7 +1015,8 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
         update_image(window, swap_rb(zoom_image(enhance8, zoom)))
 
-    def make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius, should_crop, h_flip, v_flip, rotation, min_clip, show_colorized, rgb_weights):
+    def make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius, should_crop,
+                                 h_flip, v_flip, rotation, min_clip, show_colorized, rgb_weights):
         hv = ("h" if h_flip else "") + ("v" if v_flip else "")
         flip = " --flip " + hv if h_flip or v_flip else ""
         enhance_val = str(min_adj) + ',' + str(max_adj) if should_enhance else 'no'
@@ -1027,15 +1029,12 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         write_image(color16_result, out_fn, "enhancedcolor" + suffix)
         write_image(gray16_result, out_fn, "enhancedgray" + suffix)
 
-
     # split updating the image into cheap and expensive parts, to allow faster refresh
     def update():
         update_enhance()
         update_post_enhance()
 
-    def load_image(filename_or_url):
-        src16_unflipped, filename = fetch_image(filename_or_url)
-
+    def post_load_image(src16_unflipped, filename, filename_or_url):
         # find the solar disk circle
         (is_valid, src_center, radius) = find_valid_circle(src16_unflipped)
         if not is_valid:
@@ -1048,6 +1047,10 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         src_center = flip_center(src_center, src, h_flip, v_flip)
         return is_valid, filename, src16_unflipped, src, src_center, radius
 
+    def load_image(filename_or_url):
+        src16_unflipped, filename = fetch_image(filename_or_url)
+        return post_load_image(src16_unflipped, filename, filename_or_url)
+
     def save_as_image(im, fn, suffix):
         out_fn = make_filename_for_write(fn, suffix)
         out_fn = popup_get_file(True, output_directory, out_fn)
@@ -1057,7 +1060,6 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
                 cv.imwrite(out_fn, im)
             except Exception as error:
                 print(f"Error: Failed to save {out_fn}, likely bad file extension. Try .PNG\n{error}", flush=True)
-
 
     def load():
         nonlocal is_valid, filename, src16_unflipped, src, src_center, radius
@@ -1070,12 +1072,13 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
     def save():
         command_line = make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius,
-                                                should_crop, h_flip, v_flip, rotation, min_clip, show_colorized, rgb_weights)
+                                                should_crop, h_flip, v_flip, rotation, min_clip, show_colorized,
+                                                rgb_weights)
         print("\nCommand line equivalent to adjusted parameters:", flush=True)
         print(f"    SolarFinish {command_line}\n", flush=True)
 
         result_ims = process_image(src16_unflipped, should_enhance, min_adj, max_adj, gamma, gamma_weight, should_crop,
-                               crop_radius, min_clip, h_flip, v_flip, rotation, False, filename, True, rgb_weights)
+                                   crop_radius, min_clip, h_flip, v_flip, rotation, False, filename, True, rgb_weights)
 
         if result is not None:
             gray16_result, color16_result = result_ims
@@ -1318,7 +1321,12 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
 
 # Popup a filepicker - can be for loading or saving. Return filename or ""
 def popup_get_file(save_as, folder, default):
-    filename = sg.popup_get_file('', save_as=save_as, no_window=True, initial_folder=folder, default_path=default)
+    if save_as:
+        types = (("PNG File", "*.png"), ("Tiff File", "*.tif"), ("Tiff File", "*.tiff"))
+        filename = sg.popup_get_file('', save_as=save_as, no_window=True, initial_folder=folder, default_path=default,
+                                 default_extension=".png", file_types=types)
+    else:
+        filename = sg.popup_get_file('', save_as=save_as, no_window=True, initial_folder=folder, default_path=default)
     return filename
 
 
@@ -1349,7 +1357,8 @@ def process_args():
                         help='clip minimum after contrast enhancement and before normalization')
     parser.add_argument('-i', '--interact', default=False, action='store_true', help='interactively adjust parameters')
     default_colorize = '0.5,1.25,3.75'
-    parser.add_argument('-k', '--colorize', type=str, default=default_colorize, help='R,G,B weights for colorization or no')
+    parser.add_argument('-k', '--colorize', type=str, default=default_colorize,
+                        help='R,G,B weights for colorization or no')
     # parser.add_argument('-x', '--imagealign', type=str, nargs='?', help='file or URL for image to use for alignment')
     parser.add_argument('filename', nargs='?', type=str, help='Image file to process')
 
