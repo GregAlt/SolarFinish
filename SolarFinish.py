@@ -1,5 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.14.3"
+__version__ = "0.14.4"
 
 # TODOS        - clarify silent, interact, verbose modes
 #              - possibly add invert option - can just take 1- final grayscale
@@ -1032,6 +1032,8 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     def update():
         update_enhance()
         update_post_enhance()
+        if update_zoom_on_resize(): # image size might have changed
+            update_post_rotate()
 
     def post_load_image(src16_unflipped, filename, filename_or_url):
         # find the solar disk circle
@@ -1088,6 +1090,55 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
             else:
                 save_as_image(gray16_result, out_fn, "enhancedgray" + suffix)
             cv.destroyAllWindows()
+
+    def update_zoom_on_resize():
+        nonlocal old_image_size, old_screen_size, zoom
+        screen_size = window['-SCROLLABLE-'].get_size()
+        image_size = (enhanced_rot.shape[1], enhanced_rot.shape[0])
+        if screen_size != old_screen_size or image_size != old_image_size:
+            old_screen_size, old_image_size = screen_size, image_size
+            zoom = max(10, min(300, int(max(screen_size) / max(image_size) * 100)))
+            window['-ZOOM-'].update(zoom)
+            return True
+        return False
+
+    # when updates take a long time, slider and checkboxes can have new values without an event
+    def update_values(values):
+        nonlocal should_enhance, should_crop, crop_radius, min_adj, max_adj, gamma, gamma_weight, min_clip, rotation, show_colorized, zoom, h_flip, v_flip, src, src_center
+        if values is None:
+            return False
+        assoc = {'-RED-': rgb_weights[0], '-GREEN-': rgb_weights[1], '-BLUE-': rgb_weights[2],
+                 '-ENHANCE-': should_enhance, '-CROP-': should_crop, '-MINADJUST-': min_adj,
+                 '-MAXADJUST-': max_adj, '-GAMMA-': gamma, '-GAMMAWEIGHT-': gamma_weight, '-DARKCLIP-': min_clip,
+                 '-CROPRADIUS-': crop_radius, '-ROTATION-': rotation, '-COLORIZE-': show_colorized,
+                 '-ZOOM-': zoom, '-HFLIP-': h_flip, '-VFLIP-': v_flip}
+        must_update = False
+        for key in assoc.keys():
+            if key == '-ZOOM-': # this can cause thrash with too many updates
+                continue
+            must_update = must_update or values[key] != assoc[key]
+        rgb_weights[0] = values['-RED-']
+        rgb_weights[1] = values['-GREEN-']
+        rgb_weights[2] = values['-BLUE-']
+        should_enhance = values['-ENHANCE-']
+        should_crop = values['-CROP-']
+        min_adj = values['-MINADJUST-']
+        max_adj = values['-MAXADJUST-']
+        gamma = values['-GAMMA-']
+        gamma_weight = values['-GAMMAWEIGHT-']
+        min_clip = values['-DARKCLIP-']
+        print(f"{crop_radius!=values['-CROPRADIUS-']}, crop_radius={crop_radius}", flush=True)
+        crop_radius = values['-CROPRADIUS-']
+        rotation = values['-ROTATION-']
+        show_colorized = values['-COLORIZE-']
+        zoom = values['-ZOOM-']
+
+        # flips are special because they actual change the image in the callback, probably want to change that
+        src = flip_image(src, h_flip != values['-HFLIP-'], v_flip != values['-VFLIP-'])
+        src_center = flip_center(src_center, src, h_flip != values['-HFLIP-'], v_flip != values['-VFLIP-'])
+        h_flip = values['-HFLIP-']
+        v_flip = values['-VFLIP-']
+        return must_update
 
     rotation %= 360.0
     enhanced_rot = enhanced = np.zeros(0)
@@ -1171,15 +1222,12 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         elif event == '-LOAD-':
             load()
         elif event == 'Resize':
-            screen_size = window['-SCROLLABLE-'].get_size()
-            image_size = (enhanced_rot.shape[1], enhanced_rot.shape[0])
-            if screen_size != old_screen_size or image_size != old_image_size:
-                old_screen_size, old_image_size = screen_size, image_size
-                zoom = max(10, min(300, int(max(screen_size) / max(image_size) * 100)))
-                window['-ZOOM-'].update(zoom)
+            if update_zoom_on_resize():
                 update_post_rotate()
         elif event in callbacks:
             callbacks[event](values[event])
+        if update_values(values):
+            update()
     window.close()
     sys.exit(0)
 
