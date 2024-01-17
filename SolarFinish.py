@@ -10,6 +10,7 @@ __version__ = "0.14.4"
 #              - better sub-pixel circle finding, and shifting before processing
 #              - how to allow more continuous brightness of filaproms across limb?
 #              - multi-threaded interactive
+#              - refactor interactive to have one update function that looks at all params
 
 try:
     import google.colab.files
@@ -965,8 +966,6 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         old_v, old_h = v_flip, h_flip
         v_flip = False
         h_flip, rotation = align_image(src16_unflipped, date, False)
-        src = flip_image(src, h_flip != old_h, v_flip != old_v)
-        src_center = flip_center(src_center, src, h_flip != old_h, v_flip != old_v)
         window['-VFLIP-'].update(v_flip)
         window['-HFLIP-'].update(h_flip)
         window['-ROTATION-'].update(rotation)
@@ -1043,8 +1042,6 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
         window.set_title('SolarFinish ' + filename_or_url)
         src = to_float01_from_16bit(src16_unflipped)
-        src = flip_image(src, h_flip, v_flip)
-        src_center = flip_center(src_center, src, h_flip, v_flip)
         return is_valid, filename, src16_unflipped, src, src_center, radius
 
     def load_image(filename_or_url):
