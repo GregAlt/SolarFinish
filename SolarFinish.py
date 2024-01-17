@@ -9,6 +9,7 @@ __version__ = "0.14.4"
 #                would be 4 params for min/max input and min/max output
 #              - better sub-pixel circle finding, and shifting before processing
 #              - how to allow more continuous brightness of filaproms across limb?
+#              - multi-threaded interactive
 
 try:
     import google.colab.files
@@ -950,16 +951,12 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         update_post_rotate()
 
     def on_change_horiz_flip(val):
-        nonlocal h_flip, src, src_center
-        src = flip_image(src, h_flip != val, False)
-        src_center = flip_center(src_center, src, h_flip != val, False)
+        nonlocal h_flip
         h_flip = val
         update()
 
     def on_change_vert_flip(val):
-        nonlocal v_flip, src, src_center
-        src = flip_image(src, False, v_flip != val)
-        src_center = flip_center(src_center, src, False, v_flip != val)
+        nonlocal v_flip
         v_flip = val
         update()
 
@@ -979,8 +976,8 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     # this is the expensive part
     def update_enhance():
         nonlocal enhanced
-        c1, im1 = center_and_expand(src_center, src)
-        c2, im2 = crop_to_dist(im1, c1, radius * crop_radius) if should_crop else (src_center, src)
+        c1, im1 = center_and_expand(flipped_src_center, flipped_src)
+        c2, im2 = crop_to_dist(im1, c1, radius * crop_radius) if should_crop else (flipped_src_center, flipped_src)
         enhanced = cnrgf_enhance(im2, c2, 6, min_adj, max_adj, min_clip, None, None, "") if should_enhance else im2
 
     def make_image_window(win_size, controls):
@@ -1029,6 +1026,9 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
     # split updating the image into cheap and expensive parts, to allow faster refresh
     def update():
+        nonlocal flipped_src, flipped_src_center
+        flipped_src = flip_image(src, h_flip, v_flip)
+        flipped_src_center = flip_center(src_center, src, h_flip, v_flip)
         update_enhance()
         update_post_enhance()
         if update_zoom_on_resize(): # image size might have changed
@@ -1130,18 +1130,14 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         rotation = values['-ROTATION-']
         show_colorized = values['-COLORIZE-']
         zoom = values['-ZOOM-']
-
-        # flips are special because they actual change the image in the callback, probably want to change that
-        src = flip_image(src, h_flip != values['-HFLIP-'], v_flip != values['-VFLIP-'])
-        src_center = flip_center(src_center, src, h_flip != values['-HFLIP-'], v_flip != values['-VFLIP-'])
         h_flip = values['-HFLIP-']
         v_flip = values['-VFLIP-']
         return must_update
 
     rotation %= 360.0
-    enhanced_rot = enhanced = np.zeros(0)
+    flipped_src = enhanced_rot = enhanced = np.zeros(0)
     zoom = 33
-    old_screen_size = old_image_size = None
+    flipped_src_center = old_screen_size = old_image_size = None
     if not should_align:
         align_date = datetime.datetime.today().strftime('%Y-%m-%d')
 
@@ -1314,6 +1310,17 @@ def align_image(im, date, silent):
 # Process a single image, with optional verbose output.
 def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gamma_weight, should_crop, crop_radius,
                   min_clip, h_flip, v_flip, rotation, interact, fn, silent, rgb_weights):
+
+    # 1 flip_image
+    # 2 rotate_with_expand_fill
+    # 3 find_valid_circle
+    # 4 center_and_expand
+    # 5 to_float01_from_16bit
+    # 6 cnrgf_enhance
+    # 7 brighten
+    # 8 colorize8_rgb
+    # 9 float01_to_16bit
+
     if h_flip or v_flip:
         src = flip_image(src, h_flip, v_flip)
 
