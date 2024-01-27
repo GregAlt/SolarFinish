@@ -37,7 +37,39 @@ import astropy.io.fits
 import io
 from contextlib import redirect_stdout
 import sys
+from scipy.signal import convolve
+from scipy.ndimage import gaussian_filter
 
+#lucy-richardson deconvolution
+
+def generate_psf(size, sigma=2):
+    """
+    Generates a Gaussian PSF.
+    :param size: The size of the PSF array.
+    :param sigma: The standard deviation of the Gaussian distribution.
+    :return: Gaussian PSF array.
+    """
+    x = np.linspace(-size / 2, size / 2, size)
+    y = np.linspace(-size / 2, size / 2, size)
+    x, y = np.meshgrid(x, y)
+    psf = np.exp(-(x**2 + y**2) / (2 * sigma**2))
+    psf /= psf.sum()  # Normalize the PSF
+    return psf
+
+def lucy_richardson(image, psf_sigma, iterations):
+    # https://stackoverflow.com/a/69062123
+    
+    # Generate an initial PSF
+    psf_size = 21  # Adjust this size as needed 21
+    sigma = psf_sigma   # Adjust standard deviation as needed 2.5
+    psf = generate_psf(psf_size, sigma)
+
+    estimate = np.copy(image).astype(np.float64)  # Convert to float64 for processing
+    for _ in range(iterations):
+        convolved = convolve(estimate, psf, mode='same')
+        relative_blur = image / convolved
+        estimate *= convolve(relative_blur, psf[::-1, ::-1], mode='same').astype(np.float64)  # Ensure same data type
+    return estimate
 #
 # Circle finding
 
@@ -877,7 +909,7 @@ def cnrgf_enhance(src, src_center, n, min_recip, max_recip, min_clip, show_inter
 # Interactive
 
 # Drive interactive adjustment and visualization of parameters with sliders, return final params selected
-def interactive_adjust(filename_or_url, directory, output_directory, suffix, silent, should_enhance, min_adj, max_adj,
+def interactive_adjust(filename_or_url, directory, output_directory, suffix, silent, should_deconvolve, should_enhance, min_adj, max_adj,
                        gamma, gamma_weight, min_clip, should_crop, crop_radius, h_flip, v_flip, rotation,
                        show_colorized, rgb_weights, align_date, should_align):
     def on_change_min(val):
@@ -927,6 +959,12 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     def on_enhance_change(val):
         nonlocal should_enhance
         should_enhance = val
+        update()
+
+    def on_deconvolve_change(val):
+        nonlocal should_deconvolve
+        should_deconvolve = val
+        update_deconvolved()
         update()
 
     def on_crop_change(val):
@@ -979,6 +1017,11 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         c2, im2 = crop_to_dist(im1, c1, radius * crop_radius) if should_crop else (flipped_src_center, flipped_src)
         enhanced = cnrgf_enhance(im2, c2, 6, min_adj, max_adj, min_clip, None, None, "") if should_enhance else im2
 
+    def update_deconvolved():
+        nonlocal src
+        # Run Lucy-Richardson Deconvolution
+        src = lucy_richardson(src, 2.5, 40) if should_deconvolve else to_float01_from_16bit(src16_unflipped)
+
     def make_image_window(win_size, controls):
         image_col = sg.Column([[sg.Image(key='-IMAGE-')]], size=win_size, expand_x=True, expand_y=True, scrollable=True,
                               key='-SCROLLABLE-')
@@ -1009,14 +1052,15 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
         update_image(window, swap_rb(zoom_image(enhance8, zoom)))
 
-    def make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius, should_crop,
+    def make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_deconvolve, should_enhance, crop_radius, should_crop,
                                  h_flip, v_flip, rotation, min_clip, show_colorized, rgb_weights):
         hv = ("h" if h_flip else "") + ("v" if v_flip else "")
         flip = " --flip " + hv if h_flip or v_flip else ""
         enhance_val = str(min_adj) + ',' + str(max_adj) if should_enhance else 'no'
+        deconvolve_val = " --deconvolution" if should_deconvolve else ''
         crop_val = str(crop_radius) if should_crop else 'no'
         colorize_val = f"{rgb_weights[0]},{rgb_weights[1]},{rgb_weights[2]}" if show_colorized else 'no'
-        return f"--brighten {gamma} --brightenweight {gamma_weight} --enhance {enhance_val} --crop {crop_val}{flip} --rotate {rotation} --darkclip {min_clip} --colorize {colorize_val}"
+        return f"--brighten {gamma} --brightenweight {gamma_weight} {deconvolve_val} --enhance {enhance_val} --crop {crop_val}{flip} --rotate {rotation} --darkclip {min_clip} --colorize {colorize_val}"
 
     def write_result(gray16_result, color16_result, output_directory, filename, suffix):
         out_fn = output_directory + '/' + os.path.basename(filename)  # replace input dir without output dir
@@ -1046,6 +1090,11 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
     def load_image(filename_or_url):
         src16_unflipped, filename = fetch_image(filename_or_url)
+
+        # Convert to grayscale if necessary
+        if src16_unflipped.ndim == 3:
+            src16_unflipped = np.mean(src16_unflipped, axis=2)
+
         return post_load_image(src16_unflipped, filename, filename_or_url)
 
     def save_as_image(im, fn, suffix):
@@ -1069,13 +1118,13 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
             update()
 
     def save():
-        command_line = make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_enhance, crop_radius,
+        command_line = make_command_line_string(gamma, gamma_weight, min_adj, max_adj, should_deconvolve, should_enhance, crop_radius,
                                                 should_crop, h_flip, v_flip, rotation, min_clip, show_colorized,
                                                 rgb_weights)
         print("\nCommand line equivalent to adjusted parameters:", flush=True)
         print(f"    SolarFinish {command_line}\n", flush=True)
 
-        result_ims = process_image(src16_unflipped, should_enhance, min_adj, max_adj, gamma, gamma_weight, should_crop,
+        result_ims = process_image(src16_unflipped, should_deconvolve, should_enhance, min_adj, max_adj, gamma, gamma_weight, should_crop,
                                    crop_radius, min_clip, h_flip, v_flip, rotation, False, filename, True, rgb_weights)
 
         if result is not None:
@@ -1100,11 +1149,11 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
 
     # when updates take a long time, slider and checkboxes can have new values without an event
     def update_values(values):
-        nonlocal should_enhance, should_crop, crop_radius, min_adj, max_adj, gamma, gamma_weight, min_clip, rotation, show_colorized, zoom, h_flip, v_flip, src, src_center
+        nonlocal should_deconvolve, should_enhance, should_crop, crop_radius, min_adj, max_adj, gamma, gamma_weight, min_clip, rotation, show_colorized, zoom, h_flip, v_flip, src, src_center
         if values is None:
             return False
         assoc = {'-RED-': rgb_weights[0], '-GREEN-': rgb_weights[1], '-BLUE-': rgb_weights[2],
-                 '-ENHANCE-': should_enhance, '-CROP-': should_crop, '-MINADJUST-': min_adj,
+                 '-DECONVOLVE-': should_deconvolve,'-ENHANCE-': should_enhance, '-CROP-': should_crop, '-MINADJUST-': min_adj,
                  '-MAXADJUST-': max_adj, '-GAMMA-': gamma, '-GAMMAWEIGHT-': gamma_weight, '-DARKCLIP-': min_clip,
                  '-CROPRADIUS-': crop_radius, '-ROTATION-': rotation, '-COLORIZE-': show_colorized,
                  '-ZOOM-': zoom, '-HFLIP-': h_flip, '-VFLIP-': v_flip}
@@ -1116,6 +1165,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
         rgb_weights[0] = values['-RED-']
         rgb_weights[1] = values['-GREEN-']
         rgb_weights[2] = values['-BLUE-']
+        should_deconvolve = values['-DECONVOLVE-']
         should_enhance = values['-ENHANCE-']
         should_crop = values['-CROP-']
         min_adj = values['-MINADJUST-']
@@ -1141,6 +1191,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     layout = [[sg.Button('Quit', enable_events=True, key='Exit'),
                sg.Button('Load', enable_events=True, key='-LOAD-'),
                sg.Button('Save', enable_events=True, key='-SAVE-')],
+              [sg.Checkbox('Lucy-Richardson deconvolution', should_deconvolve, enable_events=True, key='-DECONVOLVE-')],
               [sg.Checkbox('Contrast Enhance (CNRGF)', should_enhance, enable_events=True, key='-ENHANCE-')],
               [sg.Text('MinAdjust', size=(12, 1)),
                sg.Slider(range=(0.5, 5.0), resolution=0.05, default_value=min_adj, expand_x=True, enable_events=True,
@@ -1196,7 +1247,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
     update()
 
     callbacks = {'-RED-': on_change_red, '-GREEN-': on_change_green, '-BLUE-': on_change_blue,
-                 '-ENHANCE-': on_enhance_change, '-CROP-': on_crop_change,
+                 '-DECONVOLVE-': on_deconvolve_change, '-ENHANCE-': on_enhance_change, '-CROP-': on_crop_change,
                  '-MINADJUST-': on_change_min, '-MAXADJUST-': on_change_max, '-GAMMA-': on_change_gamma,
                  '-GAMMAWEIGHT-': on_change_gamma_weight, '-DARKCLIP-': on_change_clip,
                  '-CROPRADIUS-': on_change_radius,
@@ -1305,9 +1356,10 @@ def align_image(im, date, silent):
 
 
 # Process a single image, with optional verbose output.
-def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gamma_weight, should_crop, crop_radius,
+def process_image(src, should_deconvolve, should_enhance, min_recip, max_recip, brighten_gamma, gamma_weight, should_crop, crop_radius,
                   min_clip, h_flip, v_flip, rotation, interact, fn, silent, rgb_weights):
 
+    # 0 deconvolute image
     # 1 flip_image
     # 2 rotate_with_expand_fill
     # 3 find_valid_circle
@@ -1317,6 +1369,10 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
     # 7 brighten
     # 8 colorize8_rgb
     # 9 float01_to_16bit
+
+    if should_deconvolve:
+        # Run Lucy-Richardson Deconvolution
+        src = lucy_richardson(src, 2.5, 40)
 
     if h_flip or v_flip:
         src = flip_image(src, h_flip, v_flip)
@@ -1347,7 +1403,7 @@ def process_image(src, should_enhance, min_recip, max_recip, brighten_gamma, gam
         # use an expanded/centered grayscale 0-1 float image for all calculations
         (center, centered) = center_and_expand(src_center, src)
         img = to_float01_from_16bit(centered)
-
+  
         enhanced = cnrgf_enhance(img, center, 6, min_recip, max_recip, min_clip, None, None,
                                  fn) if should_enhance else img
         dist = min(crop_radius * radius, calc_min_dist_to_edge(src_center, src.shape))
@@ -1409,6 +1465,7 @@ def process_args():
                         help='gamma value to brighten by, 1 = none, 0.1 = extreme bright, 2.0 darken')
     parser.add_argument('-w', '--brightenweight', type=float, default=0.5,
                         help='weight to shift gamma brightening, 1 = use gamma curve, 0 = less brightening of darker pixels')
+    parser.add_argument('-l', '--deconvolution', default=False, action='store_true', help='Lucy-Richardson deconvolution')
     parser.add_argument('-e', '--enhance', type=str, default='1.5,3.0',
                         help='contrast enhance min,max or no. 1 = no enhance, 5 = probably too much.')
     parser.add_argument('-c', '--crop', type=str, default="1.4", help='final crop radius in solar radii. Or no')
@@ -1460,13 +1517,14 @@ def process_args():
         rgb_weights = [float(f) for f in args.colorize.split(",")]
     if not should_colorize or len(rgb_weights) != 3:
         rgb_weights = [float(f) for f in default_colorize.split(",")]
+    should_deconvolve = args.deconvolution
     should_enhance = args.enhance.lower()[0:2] != 'no'
     min_contrast_adjust, max_contrast_adjust = [float(f) for f in args.enhance.split(",")] if should_enhance else [1, 1]
     h_flip = 'h' in args.flip
     v_flip = 'v' in args.flip
     should_crop = args.crop.lower()[0:2] != 'no'
     crop = float(args.crop) if should_crop else 1.4
-    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop, args.rotate, args.darkclip, args.interact, should_colorize, rgb_weights  # , args.imagealign
+    return fn_list, silent, directory, h_flip, v_flip, output, args.append, args.gongalign, args.brighten, args.brightenweight, should_deconvolve, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop, args.rotate, args.darkclip, args.interact, should_colorize, rgb_weights  # , args.imagealign
 
 
 def main():
@@ -1492,6 +1550,7 @@ continue to evolve, and don't expect much tech support.
     should_use_url = False  # @param {type:"boolean"}
     url_to_use = "https://www.cloudynights.com/uploads/monthly_01_2023/post-412916-0-66576300-1674591059.jpg"  # @param{type:"string"}
     fallback_url = 'https://www.cloudynights.com/uploads/gallery/album_24182/gallery_79290_24182_1973021.png'
+    should_deconvolve = False
     should_enhance = True
     should_crop = True
     rgb_weights = [0.5, 1.25, 3.75]
@@ -1503,7 +1562,7 @@ continue to evolve, and don't expect much tech support.
         print("Upload full disk solar image now, or click cancel to use default test image")
         fn_list[0] = url_to_use if should_use_url else upload_file()
     else:
-        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop_radius, rotation, dark_clip, interact, should_colorize, rgb_weights = process_args()
+        fn_list, silent, directory, h_flip, v_flip, output_directory, append, gong_align_date, brighten_gamma, gamma_weight, should_deconvolve, should_enhance, min_contrast_adjust, max_contrast_adjust, should_crop, crop_radius, rotation, dark_clip, interact, should_colorize, rgb_weights = process_args()
 
     suffix = f"minc_{str(min_contrast_adjust)}_maxc_{str(max_contrast_adjust)}_g{str(brighten_gamma)}" if append else ""
     if gong_align_date != "":
@@ -1516,7 +1575,7 @@ continue to evolve, and don't expect much tech support.
         interact = False
     elif interact and not IN_COLAB:
         full_name = fn_list[0] if is_url(fn_list[0]) else directory + '/' + fn_list[0]
-        interactive_adjust(full_name, directory, output_directory, suffix, silent, should_enhance, min_contrast_adjust,
+        interactive_adjust(full_name, directory, output_directory, suffix, silent, should_deconvolve, should_enhance, min_contrast_adjust,
                            max_contrast_adjust, brighten_gamma, gamma_weight, dark_clip, should_crop,
                            crop_radius, h_flip, v_flip, rotation, should_colorize, rgb_weights, gong_align_date,
                            should_align_first)
@@ -1530,7 +1589,7 @@ continue to evolve, and don't expect much tech support.
             v_flip = False
             h_flip, rotation = align_image(src, gong_align_date, silent)
 
-        result = process_image(src, should_enhance, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
+        result = process_image(src, should_deconvolve, should_enhance, min_contrast_adjust, max_contrast_adjust, brighten_gamma,
                                gamma_weight, should_crop, crop_radius, dark_clip, h_flip, v_flip, rotation,
                                interact, filename, silent, rgb_weights)
 
