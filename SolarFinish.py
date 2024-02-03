@@ -1,5 +1,5 @@
 __copyright__ = "Copyright (C) 2023 Greg Alt"
-__version__ = "0.14.4"
+__version__ = "0.14.5"
 
 # TODOS        - clarify silent, interact, verbose modes
 #              - possibly add invert option - can just take 1- final grayscale
@@ -1055,6 +1055,7 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
             print(f"writing: {out_fn}", flush=True)
             try:
                 cv.imwrite(out_fn, im)
+                return (out_fn)
             except Exception as error:
                 print(f"Error: Failed to save {out_fn}, likely bad file extension. Try .PNG\n{error}", flush=True)
 
@@ -1082,9 +1083,12 @@ def interactive_adjust(filename_or_url, directory, output_directory, suffix, sil
             gray16_result, color16_result = result_ims
             out_fn = output_directory + '/' + os.path.basename(filename)  # replace input dir without output dir
             if show_colorized:
-                save_as_image(color16_result, out_fn, "enhancedcolor" + suffix)
+                fn_for_text = save_as_image(color16_result, out_fn, "enhancedcolor" + suffix)
             else:
-                save_as_image(gray16_result, out_fn, "enhancedgray" + suffix)
+                fn_for_text = save_as_image(gray16_result, out_fn, "enhancedgray" + suffix)
+            f = open(fn_for_text + ".txt", "w")
+            f.write("SolarFinish " + command_line + "\n")
+            f.close()
             cv.destroyAllWindows()
 
     def update_zoom_on_resize():
