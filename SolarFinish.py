@@ -127,17 +127,17 @@ def find_circle(src):
 # Returns True plus center and radius in pixels, if solar disk circle is found
 # If it fails at first, maybe that's due to a blurry high-res image, so try on a smaller version
 def find_valid_circle(src):
-    (center, radius) = get_circle_data(find_circle(src))
-    if not is_valid_circle(src.shape, radius):
+    #(center, radius) = get_circle_data(find_circle(src))
+    #if not is_valid_circle(src.shape, radius):
         # try shrinking image
-        thousands = math.ceil(min(src.shape[0], src.shape[1]) / 1000)
-        for scale in range(2, thousands + 1):
-            smaller = cv.resize(src, (int(src.shape[1] / scale), int(src.shape[0] / scale)))
-            (small_center, small_radius) = get_circle_data(find_circle(smaller))
-            (center, radius) = ((small_center[0] * scale + scale // 2, small_center[1] * scale + scale // 2),
-                                small_radius * scale + scale // 2)
-            if is_valid_circle(src.shape, radius):
-                break
+    thousands = math.ceil(min(src.shape[0], src.shape[1]) / 1000)
+    for scale in range(2, thousands + 1):
+        smaller = cv.resize(src, (int(src.shape[1] / scale), int(src.shape[0] / scale)))
+        (small_center, small_radius) = get_circle_data(find_circle(smaller))
+        (center, radius) = ((small_center[0] * scale + scale // 2, small_center[1] * scale + scale // 2),
+                            small_radius * scale + scale // 2)
+        if is_valid_circle(src.shape, radius):
+            break
     return (True, center, radius) if is_valid_circle(src.shape, radius) else (False, None, None)
 
 
