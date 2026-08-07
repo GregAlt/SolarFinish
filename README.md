@@ -92,6 +92,9 @@ options:
   -e ENHANCE, --enhance ENHANCE
                         contrast enhance min,max or no. 1 = no enhance, 5 =
                         probably too much.
+  -l DECONVOLUTION --deconvolution DECONVOLUTION
+                        add Lucy-Richardson deconvolution to sharpen the disc as 
+                        a pre-step before other adjustments
   -c CROP, --crop CROP  final crop radius in solar radii. Or no
   -r ROTATE, --rotate ROTATE
                         rotation in degrees
